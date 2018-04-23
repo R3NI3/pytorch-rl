@@ -1,0 +1,1 @@
+from core.envs.vss_interface.gym_soccer.envs.vss_soccer import SoccerEnv

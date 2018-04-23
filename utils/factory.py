@@ -2,14 +2,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+
 from core.envs.gym import GymEnv
 from core.envs.atari_ram import AtariRamEnv
 from core.envs.atari import AtariEnv
 from core.envs.lab import LabEnv
+from core.envs.vss import VssEnv
 EnvDict = {"gym":       GymEnv,                 # classic control games from openai w/ low-level   input
            "atari-ram": AtariRamEnv,            # atari integrations from openai, with low-level   input
            "atari":     AtariEnv,               # atari integrations from openai, with pixel-level input
-           "lab":       LabEnv}
+           "lab":       LabEnv,
+           "vss":       VssEnv}
 
 from core.models.empty import EmptyModel
 from core.models.dqn_mlp import DQNMlpModel

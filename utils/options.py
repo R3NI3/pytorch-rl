@@ -23,7 +23,8 @@ CONFIGS = [
 [ "a3c",      "atari",     "PongDeterministic-v4",     "a3c-cnn-dis",  "none"      ],  # 5
 [ "a3c",      "gym",       "InvertedPendulum-v1",      "a3c-mlp-con",  "none"      ],  # 6
 [ "acer",     "gym",       "CartPole-v0",              "acer-mlp-dis", "episodic"  ],  # 7  # NOTE: acer under testing
-[ "acer",     "atari",     "Boxing-v0",                "acer-cnn-dis", "episodic"  ]   # 8  # NOTE: acer under testing
+[ "acer",     "atari",     "Boxing-v0",                "acer-cnn-dis", "episodic"  ],  # 8  # NOTE: acer under testing
+[ "a3c",      "vss",       "vss_soccer-v0",            "a3c-mlp-con",  "none"      ]   # 9
 ]
 
 class Params(object):   # NOTE: shared across all modules
@@ -35,10 +36,10 @@ class Params(object):   # NOTE: shared across all modules
         self.timestamp   = "17082701"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
-        self.config      = 7
+        self.config      = 9
 
         self.seed        = 123
-        self.render      = False        # whether render the window from the original envs or not
+        self.render      = True        # whether render the window from the original envs or not
         self.visualize   = True         # whether do online plotting and stuff or not
         self.save_best   = False        # save model w/ highest reward if True, otherwise always save the latest model
 
@@ -66,7 +67,7 @@ class Params(object):   # NOTE: shared across all modules
                 self.enable_continuous  = True
             else:
                 self.enable_continuous  = False
-            self.num_processes      = 16
+            self.num_processes      = 1
 
             self.hist_len           = 1
             self.hidden_dim         = 128
@@ -129,6 +130,8 @@ class EnvParams(Params):    # settings for simulation environment
             pass
         elif self.env_type == "atari-ram":
             pass
+        elif self.env_type == "vss":
+            self.port = 5555
         elif self.env_type == "atari":
             self.hei_state = 42
             self.wid_state = 42
