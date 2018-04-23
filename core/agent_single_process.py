@@ -24,6 +24,7 @@ class AgentSingleProcess(mp.Process):
         self.process_id = process_id
 
         # env
+        print('create agent single process')
         self.env = self.master.env_prototype(self.master.env_params, self.process_id)
         # model
         self.model = self.master.model_prototype(self.master.model_params)

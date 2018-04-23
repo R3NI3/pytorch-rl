@@ -1,0 +1,188 @@
+from core.envs.vss_interface.command_pb2 import *
+from core.envs.vss_interface.debug_pb2 import *
+from core.envs.vss_interface.state_pb2 import *
+
+import time
+import numpy as np
+
+import zmq
+import google.protobuf.text_format
+import gym
+from gym import error, spaces
+from gym import utils
+from gym.utils import seeding
+
+import subprocess
+import os
+import signal
+
+from os.path import expanduser
+home = expanduser("~")
+path_simulator = home + '/Workspace/VSS-Simulator/VSS-Simulator'
+path_viewer = home + '/Workspace/VSS-Viewer/VSS-Viewer'
+
+class SoccerEnv(gym.Env, utils.EzPickle):
+    def __init__(self):
+        #start simulator and viewer
+        self.context = zmq.Context()
+        self.is_rendering = False
+
+    def setup_connections(self, ip='127.0.0.1', port=5555, is_team_yellow = True):
+        self.ip = ip
+        self.port = port
+        self.is_team_yellow = is_team_yellow
+        print('Process Opened', self.port)
+        # start simulation
+        self.p = subprocess.Popen([path_simulator, '-f', '-d', '-p', str(self.port)])
+        # state socket
+        self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
+        self.socket_state.connect ("tcp://localhost:%d" % port)
+        self.socket_state.setsockopt_string(zmq.SUBSCRIBE, "")#allow every topic
+
+        # commands socket
+        self.socket_com1 = self.context.socket(zmq.PAIR) #socket to Team 1
+        self.socket_com1.connect ("tcp://localhost:%d" % (port+1))
+
+        self.socket_com2 = self.context.socket(zmq.PAIR) #socket to Team 2
+        self.socket_com2.connect ("tcp://localhost:%d" % (port+2))
+
+        # debugs socket
+        self.socket_debug1 = self.context.socket(zmq.PAIR) #debug socket to Team 1
+        self.socket_debug1.connect ("tcp://localhost:%d" % (port+3))
+
+        self.socket_debug2 = self.context.socket(zmq.PAIR) #debug socket to Team 2
+        self.socket_debug2.connect ("tcp://localhost:%d" % (port+4))
+
+        self.last_state, reward, done = self.parse_state(self.receive_state())
+        self.init_state = self.last_state
+        shape = len(self.last_state)
+        #todo fix obs and action spaces
+        self.observation_space = spaces.Box(low=-200, high=200, dtype=np.float32, shape=(shape,))
+        self.action_space = spaces.Box(low=-100, high=100, dtype=np.float32, shape=(6,)) #wheels velocities
+
+        self.render()
+    def close_connections(self):
+        self.context.destroy()
+
+    def __del__(self):
+        pass
+        self.close_connections()
+        # Send SIGTER (on Linux)
+        self.p.terminate()
+        # Wait for process to terminate
+        returncode = self.p.wait()
+        print('Process destroyed',self.port)
+        #self.render(close=True)
+
+
+    def receive_state(self):
+        state = Global_State()
+        msg = self.socket_state.recv()
+        state.ParseFromString(msg)
+        return state
+
+    def send_commands(self, global_commands):
+        c = Global_Commands()
+        c.id = 0
+        c.is_team_yellow = self.is_team_yellow
+        c.situation = 0
+        c.name = "Teste"
+
+        for i in range(3):
+            robot = c.robot_commands.add()
+            robot.id = i
+            robot.left_vel = 1#global_commands[0][2*i]*10
+            robot.right_vel = -1#global_commands[0][2*i+1]*10
+            print(self.port,"robot",robot.left_vel,robot.right_vel)
+
+        buf = c.SerializeToString()
+        if (self.is_team_yellow):
+            self.socket_com1.send(buf)
+            time.sleep(1)
+        else:
+            self.socket_com2.send(buf)
+
+    def send_debug(self, global_debug):
+        buf = global_debug.SerializeToString()
+        if (self.is_team_yellow):
+            self.socket_debug1.send(buf)
+        else:
+            self.socket_debug2.send(buf)
+
+    def step(self, global_commands):
+        self.send_commands(global_commands)
+
+        self.last_state, reward, done = self.parse_state(self.receive_state())
+        return self.last_state, reward, done, {}
+
+    def reset(self):
+         # Send SIGKILL (on Linux)
+        self.p.terminate()
+        self.render(close=True)
+        #restart processes
+        self.p = subprocess.Popen([path_simulator, '-f', '-d', '-p', str(self.port)])
+        self.last_state, reward, done = self.parse_state(self.receive_state())
+        return self.last_state
+
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
+
+
+    def render(self, mode='human', close=False):
+        pass
+        #if (close == True):
+        #    if (self.is_rendering):
+        #        self.v.terminate()
+        #        self.is_rendering = False
+        #else:
+        #    if (not self.is_rendering):
+        #        self.v = subprocess.Popen([path_viewer, '-p', str(self.port)])
+        #        self.is_rendering = True
+
+    def parse_state(self, state):
+        for idx, ball in enumerate(state.balls):
+            #real values
+            ball_state = (ball.pose.x, ball.pose.y,
+                          ball.v_pose.x, ball.v_pose.y)
+
+            #estimated values
+            estimated_ball_state = (ball.k_pose.x, ball.k_pose.y,
+                                    ball.k_v_pose.x, ball.k_v_pose.y)
+
+        t1_state = ()
+        estimated_t1_state = ()
+        for idx, t1_robot in enumerate(state.robots_yellow):
+            #real values
+            t1_state += (t1_robot.pose.x, t1_robot.pose.y, t1_robot.pose.yaw,
+                         t1_robot.v_pose.x, t1_robot.v_pose.y, t1_robot.v_pose.yaw)
+
+            #estimated values
+            estimated_t1_state += (t1_robot.k_pose.x, t1_robot.k_pose.y, t1_robot.k_pose.yaw,
+                                   t1_robot.k_v_pose.x, t1_robot.k_v_pose.y, t1_robot.k_v_pose.yaw)
+
+        t2_state = ()
+        estimated_t2_state = ()
+        for idx, t2_robot in enumerate(state.robots_blue):
+            #real values
+            t2_state += (t2_robot.pose.x, t2_robot.pose.y, t2_robot.pose.yaw,
+                         t2_robot.v_pose.x, t2_robot.v_pose.y, t2_robot.v_pose.yaw)
+            #estimated values
+            estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw,
+                                   t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
+
+        #done isnt working atm, implement robust function
+        done = True if state.goals_yellow > 10 or state.goals_blue > 10 else False
+
+        if self.is_team_yellow:
+            reward = state.goals_yellow - state.goals_blue
+        else:
+            reward = state.goals_blue - state.goals_yellow
+
+        env_state = ball_state + t1_state + t2_state
+        #unused infos
+        #state.name_yellow
+        #state.name_blue
+        #state.time
+
+        return np.array(env_state), reward, done
