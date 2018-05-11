@@ -24,7 +24,7 @@ CONFIGS = [
 [ "a3c",      "gym",       "InvertedPendulum-v1",      "a3c-mlp-con",  "none"      ],  # 6
 [ "acer",     "gym",       "CartPole-v0",              "acer-mlp-dis", "episodic"  ],  # 7  # NOTE: acer under testing
 [ "acer",     "atari",     "Boxing-v0",                "acer-cnn-dis", "episodic"  ],  # 8  # NOTE: acer under testing
-[ "a3c",      "vss",       "vss_soccer-v0",            "a3c-mlp-con",  "none"      ]   # 9
+[ "dqn",      "vss",       "vss_soccer-v0",            "dqn-mlp",  "sequential"      ]   # 9
 ]
 
 class Params(object):   # NOTE: shared across all modules
@@ -32,8 +32,8 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "aisgpu8"    # "machine_id"
-        self.timestamp   = "17082701"   # "yymmdd##"
+        self.machine     = "Cin"    # "machine_id"
+        self.timestamp   = "180509"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
         self.config      = 9
