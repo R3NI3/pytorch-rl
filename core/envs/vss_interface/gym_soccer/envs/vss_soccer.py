@@ -4,7 +4,7 @@ from core.envs.vss_interface.state_pb2 import *
 
 import time
 import numpy as np
-
+import pdb
 import zmq
 import google.protobuf.text_format
 import gym
@@ -24,20 +24,23 @@ path_viewer = home + '/Workspace/VSS-Viewer/VSS-Viewer'
 class SoccerEnv(gym.Env, utils.EzPickle):
     def __init__(self):
         #start simulator and viewer
-        self.context = zmq.Context()
         self.is_rendering = False
+        self.context = zmq.Context()
+        self.poller = zmq.Poller()
+        #self.last_state = np.array((0,0,0,0)+(0,0,0,0,0,0)+(0,0,0,0,0,0))
 
     def setup_connections(self, ip='127.0.0.1', port=5555, is_team_yellow = True):
         self.ip = ip
         self.port = port
         self.is_team_yellow = is_team_yellow
-        print('Process Opened', self.port)
+        self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-f', '-d', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-f','-d', '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
         self.socket_state.connect ("tcp://localhost:%d" % port)
         self.socket_state.setsockopt_string(zmq.SUBSCRIBE, "")#allow every topic
+        self.socket_state.setsockopt(zmq.LINGER, 0)
 
         # commands socket
         self.socket_com1 = self.context.socket(zmq.PAIR) #socket to Team 1
@@ -58,14 +61,20 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         shape = len(self.last_state)
         #todo fix obs and action spaces
         self.observation_space = spaces.Box(low=-200, high=200, dtype=np.float32, shape=(shape,))
-        self.action_space = spaces.Box(low=-100, high=100, dtype=np.float32, shape=(6,)) #wheels velocities
+        self.action_space = spaces.Box(low=-100, high=100, dtype=np.float32, shape=(9,)) #wheels velocities
 
-        self.render()
+        # Initialize poll set
+        self.poller.register(self.socket_state, zmq.POLLIN)
+
     def close_connections(self):
+        self.socket_state.disconnect ("tcp://localhost:%d" % self.port)
+        self.socket_com1.disconnect ("tcp://localhost:%d" % (self.port+1))
+        self.socket_com2.disconnect ("tcp://localhost:%d" % (self.port+2))
+        self.socket_debug1.disconnect ("tcp://localhost:%d" % (self.port+3))
+        self.socket_debug2.disconnect ("tcp://localhost:%d" % (self.port+4))
         self.context.destroy()
 
     def __del__(self):
-        pass
         self.close_connections()
         # Send SIGTER (on Linux)
         self.p.terminate()
@@ -79,6 +88,16 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         state = Global_State()
         msg = self.socket_state.recv()
         state.ParseFromString(msg)
+        count = 0
+        while(count < 100):
+            socks = dict(self.poller.poll(10))
+            if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
+                #discard messages
+                msg = self.socket_state.recv()
+                state.ParseFromString(msg)
+                count += 1
+            else:
+                break
         return state
 
     def send_commands(self, global_commands):
@@ -88,17 +107,29 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         c.situation = 0
         c.name = "Teste"
 
-        for i in range(3):
+        self.dict = {0:(0,0),
+                     1:(10,0),
+                     2:(0,10),
+                     3:(10,10),
+                     4:(-10,10),
+                     5:(10,-10),
+                     6:(-10,0),
+                     7:(0,-10),
+                     8:(-10,-10)
+                    }
+        robot = c.robot_commands.add()
+        robot.id = 0
+        robot.left_vel = self.dict[global_commands][0]
+        robot.right_vel = self.dict[global_commands][1]
+        for i in range(2):
             robot = c.robot_commands.add()
-            robot.id = i
-            robot.left_vel = 1#global_commands[0][2*i]*10
-            robot.right_vel = -1#global_commands[0][2*i+1]*10
-            print(self.port,"robot",robot.left_vel,robot.right_vel)
+            robot.id = i+1
+            robot.left_vel = 0#global_commands[0][2*i]*10
+            robot.right_vel = 0#global_commands[0][2*i+1]*10
 
         buf = c.SerializeToString()
         if (self.is_team_yellow):
             self.socket_com1.send(buf)
-            time.sleep(1)
         else:
             self.socket_com2.send(buf)
 
@@ -111,15 +142,23 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
     def step(self, global_commands):
         self.send_commands(global_commands)
-
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state, reward, done, {}
 
     def reset(self):
+        print('RESET')
          # Send SIGKILL (on Linux)
         self.p.terminate()
-        self.render(close=True)
-        #restart processes
+        returncode = self.p.wait()
+        # Empty buffers
+        while(True):
+            socks = dict(self.poller.poll(100))
+            if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
+                #discard messages
+                message = self.socket_state.recv()
+            else:
+                break
+
         self.p = subprocess.Popen([path_simulator, '-f', '-d', '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
@@ -179,10 +218,19 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         else:
             reward = state.goals_blue - state.goals_yellow
 
+
+        if(reward != 0):
+            #pdb.set_trace()
+            print(reward)
+            print("******************GOAL****************")
+            done = True
+        elif(state.time >= 10):
+            done = True
+
         env_state = ball_state + t1_state + t2_state
         #unused infos
         #state.name_yellow
         #state.name_blue
-        #state.time
+        #print(state.time)
 
         return np.array(env_state), reward, done
