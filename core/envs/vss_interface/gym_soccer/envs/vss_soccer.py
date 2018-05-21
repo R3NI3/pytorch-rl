@@ -210,8 +210,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw,
                                    t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
-        #done isnt working atm, implement robust function
-        done = True if state.goals_yellow > 10 or state.goals_blue > 10 else False
+        done = False
 
         if self.is_team_yellow:
             reward = state.goals_yellow - state.goals_blue
@@ -221,11 +220,16 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         if(reward != 0):
             #pdb.set_trace()
-            print(reward)
             print("******************GOAL****************")
+            reward = reward*(11 - state.time)
+            print(reward)
             done = True
         elif(state.time >= 10):
             done = True
+        else:
+            rb1 = np.array((t1_state[0],t1_state[1]))
+            ball = np.array((ball_state[0],ball_state[1]))
+            reward = 1/(10*np.linalg.norm(rb1 - ball))
 
         env_state = ball_state + t1_state + t2_state
         #unused infos

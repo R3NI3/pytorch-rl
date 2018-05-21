@@ -33,7 +33,7 @@ class Params(object):   # NOTE: shared across all modules
 
         # training signature
         self.machine     = "Cin"    # "machine_id"
-        self.timestamp   = "180509"   # "yymmdd##"
+        self.timestamp   = "180521"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
         self.config      = 9
@@ -183,8 +183,9 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.value_criteria = F.smooth_l1_loss
             self.optim          = optim.Adam
         # hyperparameters
-        if self.agent_type == "dqn" and self.env_type == "gym":
-            self.steps               = 100000   # max #iterations
+        if self.agent_type == "dqn" and self.env_type == "gym" or \
+           self.agent_type == "dqn" and self.env_type == "vss":
+            self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
             self.gamma               = 0.99
             self.clip_grad           = 1.#np.inf
