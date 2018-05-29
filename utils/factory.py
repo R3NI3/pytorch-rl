@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 
-from core.envs.gym import GymEnv
+from core.envs.env_gym import GymEnv
 from core.envs.atari_ram import AtariRamEnv
 from core.envs.atari import AtariEnv
 from core.envs.lab import LabEnv
