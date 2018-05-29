@@ -16,10 +16,8 @@ import subprocess
 import os
 import signal
 
-from os.path import expanduser
-home = expanduser("~")
-path_simulator = home + '/Workspace/VSS-Simulator/VSS-Simulator'
-path_viewer = home + '/Workspace/VSS-Viewer/VSS-Viewer'
+path_simulator = 'vss_sim/VSS-Simulator'
+path_viewer = 'vss_sim/VSS-Viewer'
 
 class SoccerEnv(gym.Env, utils.EzPickle):
     def __init__(self):
@@ -28,6 +26,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.context = zmq.Context()
         self.poller = zmq.Poller()
         #self.last_state = np.array((0,0,0,0)+(0,0,0,0,0,0)+(0,0,0,0,0,0))
+        self.prev_robot_ball_dist = None
+        self.prev_ball_goal_dist = None
 
     def setup_connections(self, ip='127.0.0.1', port=5555, is_team_yellow = True):
         self.ip = ip
@@ -35,11 +35,15 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.is_team_yellow = is_team_yellow
         self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-f','-d', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', '250', '-d', '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
         self.socket_state.connect ("tcp://localhost:%d" % port)
-        self.socket_state.setsockopt_string(zmq.SUBSCRIBE, "")#allow every topic
+        #self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b"")#allow every topic
+        try:
+        		self.socket_state.setsockopt(zmq.SUBSCRIBE, b'')
+        except TypeError:
+        		self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b'')
         self.socket_state.setsockopt(zmq.LINGER, 0)
 
         # commands socket
@@ -159,7 +163,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator, '-f', '-d', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', '100', '-d', '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 
@@ -212,24 +216,36 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         done = False
 
+        reward = 0;		
         if self.is_team_yellow:
             reward = state.goals_yellow - state.goals_blue
         else:
             reward = state.goals_blue - state.goals_yellow
 
-
         if(reward != 0):
             #pdb.set_trace()
             print("******************GOAL****************")
-            reward = reward*(11 - state.time)
-            print(reward)
+            reward = 5*reward*(11 - state.time)
             done = True
         elif(state.time >= 10):
             done = True
         else:
-            rb1 = np.array((t1_state[0],t1_state[1]))
             ball = np.array((ball_state[0],ball_state[1]))
-            reward = 1/(10*np.linalg.norm(rb1 - ball))
+            goalR = np.array((200,65))
+            rb1 = np.array((t1_state[0],t1_state[1]))
+            robot_ball_dist = np.linalg.norm(ball-rb1)
+            ball_goal_dist = np.linalg.norm(goalR-ball)
+            if (self.prev_robot_ball_dist == None):
+            	reward = 0
+            else:
+            	ball_reward = self.prev_robot_ball_dist-robot_ball_dist
+            	goal_reward = self.prev_ball_goal_dist-ball_goal_dist
+            	reward = ball_reward + 2*goal_reward
+            	#print(ball_reward, goal_reward, reward)
+            self.prev_robot_ball_dist = robot_ball_dist
+            self.prev_ball_goal_dist = ball_goal_dist
+        #print("Reward:"+str(reward))
+        #time.sleep(0.100)#200ms
 
         env_state = ball_state + t1_state + t2_state
         #unused infos
@@ -238,3 +254,4 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #print(state.time)
 
         return np.array(env_state), reward, done
+
