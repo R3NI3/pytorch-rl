@@ -35,7 +35,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.is_team_yellow = is_team_yellow
         self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-r', '250', '-d', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', '100', '-d', '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
         self.socket_state.connect ("tcp://localhost:%d" % port)
@@ -225,6 +225,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         if(reward != 0):
             #pdb.set_trace()
             print("******************GOAL****************")
+            print("Reward:"+str(reward))
             reward = 5*reward*(11 - state.time)
             done = True
         elif(state.time >= 10):
@@ -238,15 +239,18 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             if (self.prev_robot_ball_dist == None):
             	reward = 0
             else:
-            	ball_reward = self.prev_robot_ball_dist-robot_ball_dist
-            	goal_reward = self.prev_ball_goal_dist-ball_goal_dist
+            	ball_reward = self.prev_robot_ball_dist-robot_ball_dist #reward for goint to the ball
+                if (ball_reward>-0.5 and ball_reward<0.1):
+                    ball_reward = -0.5 # tries to prevent robot from stoping
+            	goal_reward = self.prev_ball_goal_dist-ball_goal_dist #reward for the ball goint to the goal
+
             	reward = ball_reward + 2*goal_reward
             	#print(ball_reward, goal_reward, reward)
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_goal_dist = ball_goal_dist
-        #print("Reward:"+str(reward))
-        #time.sleep(0.100)#200ms
 
+        #print("Reward:"+str(reward))
+        
         env_state = ball_state + t1_state + t2_state
         #unused infos
         #state.name_yellow
