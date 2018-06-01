@@ -35,7 +35,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.is_team_yellow = is_team_yellow
         self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-r', '100', '-d', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', '250', '-d', '-a', '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
         self.socket_state.connect ("tcp://localhost:%d" % port)
@@ -163,7 +163,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator, '-r', '100', '-d', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', '250', '-d', '-a', '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 

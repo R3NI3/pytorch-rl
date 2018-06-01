@@ -36,6 +36,7 @@ class Params(object):   # NOTE: shared across all modules
         self.timestamp   = "reward2"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
+        self.load_pretrained = False    # load pretrained model if true
         self.config      = 9
 
         self.seed        = 123
@@ -111,6 +112,9 @@ class Params(object):   # NOTE: shared across all modules
             self.model_file  = self.model_name  # NOTE: so only need to change self.mode to 2 to test the current training
             assert self.model_file is not None, "Pre-Trained model is None, Testing aborted!!!"
             self.refs = self.refs + "_test"     # NOTE: using this as env for visdom for testing, to avoid accidentally redraw on the training plots
+        else:
+            if self.load_pretrained:
+                self.model_file  = self.model_name
 
         # logging configs
         self.log_name    = self.root_dir + "/logs/" + self.refs + ".log"
