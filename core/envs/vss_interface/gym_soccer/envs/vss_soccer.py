@@ -35,7 +35,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.is_team_yellow = is_team_yellow
         self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-r', '250', '-d', '-a', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', '50', '-d', '-a', '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
         self.socket_state.connect ("tcp://localhost:%d" % port)
@@ -45,6 +45,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         except TypeError:
         		self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b'')
         self.socket_state.setsockopt(zmq.LINGER, 0)
+        self.socket_state.setsockopt(zmq.RCVTIMEO, 5000)
 
         # commands socket
         self.socket_com1 = self.context.socket(zmq.PAIR) #socket to Team 1
@@ -87,22 +88,26 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         print('Process destroyed',self.port)
         #self.render(close=True)
 
-
     def receive_state(self):
-        state = Global_State()
-        msg = self.socket_state.recv()
-        state.ParseFromString(msg)
-        count = 0
-        while(count < 100):
-            socks = dict(self.poller.poll(10))
-            if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
-                #discard messages
-                msg = self.socket_state.recv()
-                state.ParseFromString(msg)
-                count += 1
-            else:
-                break
-        return state
+        try:
+			state = Global_State()
+			msg = self.socket_state.recv()
+			state.ParseFromString(msg)
+			count = 0
+			while(count < 100):
+				socks = dict(self.poller.poll(10))
+				if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
+					#discard messages
+					msg = self.socket_state.recv()
+					state.ParseFromString(msg)
+					count += 1
+				else:
+					break
+			return state
+        except Exception as e:
+			print("caught timeout:"+str(e))
+			 
+        return None
 
     def send_commands(self, global_commands):
         c = Global_Commands()
@@ -125,6 +130,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         robot.id = 0
         robot.left_vel = self.dict[global_commands][0]
         robot.right_vel = self.dict[global_commands][1]
+        #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
         for i in range(2):
             robot = c.robot_commands.add()
             robot.id = i+1
@@ -146,12 +152,20 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
     def step(self, global_commands):
         self.send_commands(global_commands)
-        self.last_state, reward, done = self.parse_state(self.receive_state())
+                
+        rcvd_state = self.receive_state()
+        while rcvd_state == None:
+			self.reset()
+			rcvd_state = self.receive_state()
+			
+        self.last_state, reward, done = self.parse_state(rcvd_state)
         return self.last_state, reward, done, {}
 
     def reset(self):
         print('RESET')
-         # Send SIGKILL (on Linux)
+        self.prev_robot_ball_dist = None
+        self.prev_ball_goal_dist = None
+        # Send SIGKILL (on Linux)
         self.p.terminate()
         returncode = self.p.wait()
         # Empty buffers
@@ -163,7 +177,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator, '-r', '250', '-d', '-a', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', '50', '-d', '-a', '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 
@@ -216,7 +230,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         done = False
 
-        reward = 0;		
+        reward = 0;
         if self.is_team_yellow:
             reward = state.goals_yellow - state.goals_blue
         else:
@@ -231,17 +245,17 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             done = True
         else:
             ball = np.array((ball_state[0],ball_state[1]))
-            goalR = np.array((200,65))
+            goalR = np.array((165,65))
             rb1 = np.array((t1_state[0],t1_state[1]))
             robot_ball_dist = np.linalg.norm(ball-rb1)
             ball_goal_dist = np.linalg.norm(goalR-ball)
             if (self.prev_robot_ball_dist == None):
-            	reward = 0
+            	reward = -1
             else:
             	ball_reward = self.prev_robot_ball_dist-robot_ball_dist
             	goal_reward = self.prev_ball_goal_dist-ball_goal_dist
-            	reward = ball_reward + 2*goal_reward
-            	#print(ball_reward, goal_reward, reward)
+            	reward = ball_reward + 2*goal_reward - 0.2
+            	#print("%.2f" %ball_reward, "%.2f" %goal_reward, "%.2f" %reward)
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_goal_dist = ball_goal_dist
         #print("Reward:"+str(reward))
