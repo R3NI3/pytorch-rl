@@ -24,7 +24,8 @@ CONFIGS = [
 [ "a3c",      "gym",       "InvertedPendulum-v1",      "a3c-mlp-con",  "none"      ],  # 6
 [ "acer",     "gym",       "CartPole-v0",              "acer-mlp-dis", "episodic"  ],  # 7  # NOTE: acer under testing
 [ "acer",     "atari",     "Boxing-v0",                "acer-cnn-dis", "episodic"  ],  # 8  # NOTE: acer under testing
-[ "dqn",      "vss",       "vss_soccer-v0",            "dqn-mlp",  "sequential"      ]   # 9
+[ "dqn",      "vss",       "vss_soccer-v0",            "dqn-mlp",  "sequential"      ],   # 9
+[ "a3c",      "vss",       "vss_soccer_con-v0",            "a3c-mlp-con",  "none"      ]   # 10
 ]
 
 class Params(object):   # NOTE: shared across all modules
@@ -32,12 +33,12 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans"    # "machine_id"
-        self.timestamp   = "180612"   # "yymmdd##"
+        self.machine     = "cin"    # "machine_id"
+        self.timestamp   = "a3c1305"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
         self.load_pretrained = False    # load pretrained model if true
-        self.config      = 9
+        self.config      = 10
 
         self.seed        = 123
         self.render      = True        # whether render the window from the original envs or not
@@ -68,7 +69,7 @@ class Params(object):   # NOTE: shared across all modules
                 self.enable_continuous  = True
             else:
                 self.enable_continuous  = False
-            self.num_processes      = 1
+            self.num_processes      = 4
 
             self.hist_len           = 1
             self.hidden_dim         = 128
