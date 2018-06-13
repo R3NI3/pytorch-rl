@@ -16,8 +16,10 @@ import subprocess
 import os
 import signal
 
-path_simulator = 'vss_sim/VSS-Simulator'
 path_viewer = 'vss_sim/VSS-Viewer'
+path_simulator = 'vss_sim/VSS-Simulator'
+command_rate = 300 #ms
+cmd_wait = 0.200 #s
 
 class SoccerEnv(gym.Env, utils.EzPickle):
     def __init__(self):
@@ -28,6 +30,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #self.last_state = np.array((0,0,0,0)+(0,0,0,0,0,0)+(0,0,0,0,0,0))
         self.prev_robot_ball_dist = None
         self.prev_ball_goal_dist = None
+        self.cmd = 3
 
     def setup_connections(self, ip='127.0.0.1', port=5555, is_team_yellow = True):
         self.ip = ip
@@ -35,7 +38,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.is_team_yellow = is_team_yellow
         self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-r', '50', '-d', '-a', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
         self.socket_state.connect ("tcp://localhost:%d" % port)
@@ -101,6 +104,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 					msg = self.socket_state.recv()
 					state.ParseFromString(msg)
 					count += 1
+					#print("discard");
 				else:
 					break
 			return state
@@ -115,16 +119,20 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         c.is_team_yellow = self.is_team_yellow
         c.situation = 0
         c.name = "Teste"
-
+        #if (self.cmd == 8):
+		#	self.cmd = 3
+        #else:
+		#	self.cmd = 8
+        #global_commands = self.cmd
         self.dict = {0:(0,0),
-                     1:(10,0),
-                     2:(0,10),
-                     3:(10,10),
+                     1:(25,0),
+                     2:(0,25),
+                     3:(50,50),
                      4:(-10,10),
                      5:(10,-10),
-                     6:(-10,0),
-                     7:(0,-10),
-                     8:(-10,-10)
+                     6:(-25,0),
+                     7:(0,-30),
+                     8:(-50,-50)
                     }
         robot = c.robot_commands.add()
         robot.id = 0
@@ -152,15 +160,37 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
     def step(self, global_commands):
         self.send_commands(global_commands)
-                
+        time.sleep(cmd_wait)#wait for the command to became effective
         rcvd_state = self.receive_state()
         while rcvd_state == None:
 			self.reset()
 			rcvd_state = self.receive_state()
-			
+		
+        #prev_state = self.last_state	
         self.last_state, reward, done = self.parse_state(rcvd_state)
+
+        #self.debugStep(prev_state, self.last_state, global_commands)
         return self.last_state, reward, done, {}
 
+    def debugStep(self, prev_state, new_state, cmd):
+		self.dict = {0:(0,0),
+					 1:(10,0), 2:(0,10), 3:(10,10), 4:(-10,10), 5:(10
+					 ,-10), 6:(-10,0), 7:(0,-10), 8:(-10,-10)
+					}
+		left_vel = self.dict[cmd][0]
+		right_vel = self.dict[cmd][1]
+
+		last_x = prev_state[4]
+		last_y = prev_state[5]
+		last_yaw = prev_state[6]
+		
+		new_x = new_state[4]
+		new_y = new_state[5]
+		new_yaw = new_state[6]
+
+		print("prev:", "%.1f" %last_x, "%.1f" %last_y, "%.1f" %last_yaw, left_vel, right_vel)
+		print("new: ", "%.1f" %new_x, "%.1f" %new_y, "%.1f" %new_yaw)
+		
     def reset(self):
         print('RESET')
         self.prev_robot_ball_dist = None
@@ -177,7 +207,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator, '-r', '50', '-d', '-a', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 
@@ -238,24 +268,31 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         if(reward != 0):
             #pdb.set_trace()
-            print("******************GOAL****************")
-            reward = 5*reward*(11 - state.time)
+            reward = 1000*reward
             done = True
+            print("******************GOAL****************")
+            print("Reward:"+str(reward))
         elif(state.time >= 10):
             done = True
         else:
             ball = np.array((ball_state[0],ball_state[1]))
             goalR = np.array((165,65))
+            goalL = np.array((10,65))
             rb1 = np.array((t1_state[0],t1_state[1]))
             robot_ball_dist = np.linalg.norm(ball-rb1)
-            ball_goal_dist = np.linalg.norm(goalR-ball)
+            ball_goalR_dist = np.linalg.norm(goalR-ball)
+            ball_goalL_dist = np.linalg.norm(goalL-ball)
+            ball_goal_dist = (ball_goalR_dist - ball_goalL_dist)/2
             if (self.prev_robot_ball_dist == None):
-            	reward = -1
+            	reward = -0.2
             else:
             	ball_reward = self.prev_robot_ball_dist-robot_ball_dist
             	goal_reward = self.prev_ball_goal_dist-ball_goal_dist
-            	reward = ball_reward + 2*goal_reward - 0.2
-            	#print("%.2f" %ball_reward, "%.2f" %goal_reward, "%.2f" %reward)
+            	
+            	dist_scale = (50/robot_ball_dist) #50 is about a quarter of the field diagonal
+            	reward = (ball_reward + 5*goal_reward)*dist_scale - 0.2
+            	if (abs(reward)>2):
+					print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") " + "bal:("+"%.1f"%ball[0]+", %.1f"%ball[1]+") "+ "%.2f" %ball_reward+ ", %.2f" %goal_reward+ ", %.2f" %reward)
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_goal_dist = ball_goal_dist
         #print("Reward:"+str(reward))

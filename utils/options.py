@@ -32,8 +32,8 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Macbook"    # "machine_id"
-        self.timestamp   = "reward2"   # "yymmdd##"
+        self.machine     = "Hans"    # "machine_id"
+        self.timestamp   = "180612"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
         self.load_pretrained = False    # load pretrained model if true
@@ -55,7 +55,7 @@ class Params(object):   # NOTE: shared across all modules
                 self.hist_len       = 1
                 self.hidden_dim     = 16
             else:
-                self.hist_len       = 4
+                self.hist_len       = 1
                 self.hidden_dim     = 256
 
             self.use_cuda           = torch.cuda.is_available()
@@ -191,13 +191,13 @@ class AgentParams(Params):  # hyperparameters for drl agents
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
-            self.gamma               = 0.99
+            self.gamma               = 0.75
             self.clip_grad           = 1.#np.inf
             self.lr                  = 0.0001
             self.lr_decay            = False
             self.weight_decay        = 0.
-            self.eval_freq           = 2500     # NOTE: here means every this many steps
-            self.eval_steps          = 1000
+            self.eval_freq           = 1000     # NOTE: here means every this many steps
+            self.eval_steps          = 500
             self.prog_freq           = self.eval_freq
             self.test_nepisodes      = 1
 
@@ -206,7 +206,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.valid_size          = 250
             self.eps_start           = 1
             self.eps_end             = 0.3
-            self.eps_eval            = 0.#0.05
+            self.eps_eval            = 0.05
             self.eps_decay           = 50000
             self.target_model_update = 1000#0.0001
             self.action_repetition   = 1

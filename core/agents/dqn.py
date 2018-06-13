@@ -151,6 +151,7 @@ class DQNAgent(Agent):
         # choose action
         if np.random.uniform() < self.eps:  # then we choose a random action
             action = random.randrange(self.action_dim)
+            print('r', end='')
         else:                               # then we choose the greedy action
             if self.use_cuda:
                 action = np.argmax(q_values_ts.cpu().numpy())
