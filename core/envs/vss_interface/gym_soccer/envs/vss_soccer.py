@@ -44,9 +44,9 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.socket_state.connect ("tcp://localhost:%d" % port)
         #self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b"")#allow every topic
         try:
-        		self.socket_state.setsockopt(zmq.SUBSCRIBE, b'')
+                self.socket_state.setsockopt(zmq.SUBSCRIBE, b'')
         except TypeError:
-        		self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b'')
+                self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b'')
         self.socket_state.setsockopt(zmq.LINGER, 0)
         self.socket_state.setsockopt(zmq.RCVTIMEO, 5000)
 
@@ -93,24 +93,24 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
     def receive_state(self):
         try:
-			state = Global_State()
-			msg = self.socket_state.recv()
-			state.ParseFromString(msg)
-			count = 0
-			while(count < 100):
-				socks = dict(self.poller.poll(10))
-				if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
-					#discard messages
-					msg = self.socket_state.recv()
-					state.ParseFromString(msg)
-					count += 1
-					#print("discard");
-				else:
-					break
-			return state
+            state = Global_State()
+            msg = self.socket_state.recv()
+            state.ParseFromString(msg)
+            count = 0
+            while(count < 100):
+                socks = dict(self.poller.poll(10))
+                if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
+                    #discard messages
+                    msg = self.socket_state.recv()
+                    state.ParseFromString(msg)
+                    count += 1
+                    #print("discard");
+                else:
+                    break
+            return state
         except Exception as e:
-			print("caught timeout:"+str(e))
-			 
+            print("caught timeout:"+str(e))
+             
         return None
 
     def send_commands(self, global_commands):
@@ -120,9 +120,9 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         c.situation = 0
         c.name = "Teste"
         #if (self.cmd == 8):
-		#	self.cmd = 3
+        #    self.cmd = 3
         #else:
-		#	self.cmd = 8
+        #    self.cmd = 8
         #global_commands = self.cmd
         self.dict = {0:(0,0),
                      1:(25,0),
@@ -163,34 +163,34 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         time.sleep(cmd_wait)#wait for the command to became effective
         rcvd_state = self.receive_state()
         while rcvd_state == None:
-			self.reset()
-			rcvd_state = self.receive_state()
-		
-        #prev_state = self.last_state	
+            self.reset()
+            rcvd_state = self.receive_state()
+        
+        #prev_state = self.last_state    
         self.last_state, reward, done = self.parse_state(rcvd_state)
 
         #self.debugStep(prev_state, self.last_state, global_commands)
         return self.last_state, reward, done, {}
 
     def debugStep(self, prev_state, new_state, cmd):
-		self.dict = {0:(0,0),
-					 1:(10,0), 2:(0,10), 3:(10,10), 4:(-10,10), 5:(10
-					 ,-10), 6:(-10,0), 7:(0,-10), 8:(-10,-10)
-					}
-		left_vel = self.dict[cmd][0]
-		right_vel = self.dict[cmd][1]
+        self.dict = {0:(0,0),
+                     1:(10,0), 2:(0,10), 3:(10,10), 4:(-10,10), 5:(10
+                     ,-10), 6:(-10,0), 7:(0,-10), 8:(-10,-10)
+                    }
+        left_vel = self.dict[cmd][0]
+        right_vel = self.dict[cmd][1]
 
-		last_x = prev_state[4]
-		last_y = prev_state[5]
-		last_yaw = prev_state[6]
-		
-		new_x = new_state[4]
-		new_y = new_state[5]
-		new_yaw = new_state[6]
+        last_x = prev_state[4]
+        last_y = prev_state[5]
+        last_yaw = prev_state[6]
+        
+        new_x = new_state[4]
+        new_y = new_state[5]
+        new_yaw = new_state[6]
 
-		print("prev:", "%.1f" %last_x, "%.1f" %last_y, "%.1f" %last_yaw, left_vel, right_vel)
-		print("new: ", "%.1f" %new_x, "%.1f" %new_y, "%.1f" %new_yaw)
-		
+        print("prev:", "%.1f" %last_x, "%.1f" %last_y, "%.1f" %last_yaw, left_vel, right_vel)
+        print("new: ", "%.1f" %new_x, "%.1f" %new_y, "%.1f" %new_yaw)
+        
     def reset(self):
         print('RESET')
         self.prev_robot_ball_dist = None
@@ -284,15 +284,15 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             ball_goalL_dist = np.linalg.norm(goalL-ball)
             ball_goal_dist = (ball_goalR_dist - ball_goalL_dist)/2
             if (self.prev_robot_ball_dist == None):
-            	reward = -0.2
+                reward = -0.2
             else:
-            	ball_reward = self.prev_robot_ball_dist-robot_ball_dist
-            	goal_reward = self.prev_ball_goal_dist-ball_goal_dist
-            	
-            	dist_scale = (50/robot_ball_dist) #50 is about a quarter of the field diagonal
-            	reward = (ball_reward + 5*goal_reward)*dist_scale - 0.2
-            	if (abs(reward)>2):
-					print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") " + "bal:("+"%.1f"%ball[0]+", %.1f"%ball[1]+") "+ "%.2f" %ball_reward+ ", %.2f" %goal_reward+ ", %.2f" %reward)
+                ball_reward = self.prev_robot_ball_dist-robot_ball_dist
+                goal_reward = self.prev_ball_goal_dist-ball_goal_dist
+                
+                dist_scale = (50/robot_ball_dist) #50 is about a quarter of the field diagonal
+                reward = (ball_reward + 5*goal_reward)*dist_scale - 0.2
+                if (abs(reward)>2):
+                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") " + "bal:("+"%.1f"%ball[0]+", %.1f"%ball[1]+") "+ "%.2f" %ball_reward+ ", %.2f" %goal_reward+ ", %.2f" %reward)
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_goal_dist = ball_goal_dist
         #print("Reward:"+str(reward))
