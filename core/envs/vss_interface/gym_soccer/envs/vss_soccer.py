@@ -40,6 +40,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.HALF_AXIS = 8
         self.WHEEL_RADIUS = 2
         self.BALL_X_APPROACH = -5
+        self.decAlpha = 0.75
         
         self.x = 0
         self.y = 0 
@@ -48,7 +49,6 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.target_y = None
         self.ball_x = None
         self.ball_y = None
-        self.decAlpha = 0.75
 
     def setup_connections(self, ip='127.0.0.1', port=5555, is_team_yellow = True):
         self.ip = ip
@@ -145,33 +145,38 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         c.name = "Teste"
         robot = c.robot_commands.add()
         robot.id = 0
-                
+
         if (self.target_x == None): #Reset target to robot position if None
             self.target_x = self.x
             self.target_y = self.y
         else: # Apply decrements
             self.target_x = self.target_x*self.decAlpha + self.x*(1-self.decAlpha)
             self.target_y = self.target_y*self.decAlpha + self.y*(1-self.decAlpha)
-        
-        #global_commands = 0
-        
+
+        #global_commands = 3
+
         if global_commands == 0: #default command: carry ball to goal
             goal_x = 165
             goal_y = 65
             goal_theta = math.atan2((self.ball_y-goal_y),(self.ball_x-goal_x))
             robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.ball_x+self.BALL_X_APPROACH, self.ball_y, goal_theta, self.RHO_INC)
+            self.target_x = None
+            #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
+            self.send_debug([self.ball_x+self.BALL_X_APPROACH,self.ball_y,goal_theta])
         else:
-            self.dict = {1:(-5,0),
-                         2:(5,0),
-                         3:(0,-5),
-                         4:(0,5)
+            self.dict = {1:(-20,0),
+                         2:(20,0),
+                         3:(0,-20),
+                         4:(0,20)
                         }
             self.target_x = self.clip(self.target_x + self.dict[global_commands][0], -20, 190)
             self.target_y = self.clip(self.target_y + self.dict[global_commands][1], -20, 150)
+            target_theta = math.atan2((self.target_y-self.y),(self.target_x-self.x))
+            self.send_debug([self.target_x,self.target_y,target_theta])
+
+            robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta)
+            #print(str(global_commands)+":X:%.1f"%(self.x)+ " DX:%.1f"%(self.target_x)+ " Y:%.1f"%(self.y)+ " DY:%.1f"%(self.target_y)+" DT:%.1f"%math.degrees(target_theta))
             
-            robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_x, math.atan2((self.target_y-self.y),(self.target_x-self.x)))
-        
-        #print("DX:%.1f"%(self.target_x-self.x)+ " DY:%.1f"%(self.target_y-self.y))
         #print("lin:"+str(self.speed_lin)+"\tang:"+str(self.speed_ang)+"\tvel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]")
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
         for i in range(2):
@@ -199,21 +204,24 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         rho  = np.sqrt((target_x-self.x)*(target_x-self.x) + (target_y-self.y)*(target_y-self.y))+rho_inc
         lambda_ = math.atan2((target_y-self.y),(target_x-self.x))
         alpha = self.to180range(lambda_ - self.theta)
+        beta = self.to180range(-target_theta - alpha)
+        
         reverse = False
         if (abs(alpha)>math.pi/2):
             self.theta = self.to180range(self.theta+math.pi)
             alpha = self.to180range(lambda_ - self.theta)
             reverse = True
             #print("Reverse")
-                
-        beta = -target_theta - alpha 
+
         self.linearSpeed = self.KRHO*rho
         self.angularSpeed = self.KALPHA*alpha + self.KBETA*beta
         
-        #print (math.degrees(self.theta-lambda_), math.degrees(self.theta), math.degrees(lambda_), math.degrees(alpha))
+        #print (math.degrees(self.theta), math.degrees(target_theta), math.degrees(lambda_), math.degrees(alpha), math.degrees(beta))
 
         leftSpeed  = (self.linearSpeed - self.angularSpeed*self.HALF_AXIS)/self.WHEEL_RADIUS
         rightSpeed = (self.linearSpeed + self.angularSpeed*self.HALF_AXIS)/self.WHEEL_RADIUS
+        
+        #print(self.linearSpeed, self.angularSpeed)
 
         if reverse:
             return -leftSpeed, -rightSpeed
@@ -221,7 +229,15 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         return rightSpeed, leftSpeed
 
     def send_debug(self, global_debug):
-        buf = global_debug.SerializeToString()
+        #print("DEBUG")
+        d = Global_Debug()
+        pose = d.final_poses.add()
+        pose.id = 0
+        pose.x = global_debug[0]
+        pose.y = global_debug[1]
+        pose.yaw = global_debug[2]
+
+        buf = d.SerializeToString()
         if (self.is_team_yellow):
             self.socket_debug1.send(buf)
         else:
@@ -278,7 +294,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator,  '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 
@@ -362,7 +378,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             	
             	dist_scale = (50/robot_ball_dist) #50 is about a quarter of the field diagonal
             	reward = (ball_reward + 5*goal_reward)*dist_scale - 0.2
-            	if (abs(reward)>2):
+            	if (abs(reward)>15):
 				print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") " + "bal:("+"%.1f"%ball[0]+", %.1f"%ball[1]+") "+ "%.2f" %ball_reward+ ", %.2f" %goal_reward+ ", %.2f" %reward)
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_goal_dist = ball_goal_dist
