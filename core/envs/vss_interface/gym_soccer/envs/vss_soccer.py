@@ -36,11 +36,11 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.KRHO = 1
         self.RHO_INC = 30 #increase rho a little bit, so it can catch up with the ball
         self.KALPHA = 1.8
-        self.KBETA = -0.6
+        self.KBETA = -0.75
         self.HALF_AXIS = 8
         self.WHEEL_RADIUS = 2
-        self.BALL_X_APPROACH = -5
-        self.decAlpha = 0.75
+        self.BALL_X_APPROACH = -8
+        self.decAlpha = 0.9
         
         self.x = 0
         self.y = 0 
@@ -153,7 +153,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             self.target_x = self.target_x*self.decAlpha + self.x*(1-self.decAlpha)
             self.target_y = self.target_y*self.decAlpha + self.y*(1-self.decAlpha)
 
-        #global_commands = 3
+        #global_commands = 0
 
         if global_commands == 0: #default command: carry ball to goal
             goal_x = 165
@@ -313,6 +313,72 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #    if (not self.is_rendering):
         #        self.v = subprocess.Popen([path_viewer, '-p', str(self.port)])
         #        self.is_rendering = True
+    def check_collision(self, t1, t2):
+        robot_id = 0
+        if(self.is_team_yellow):
+            robot_x = t1[robot_id*6+0]
+            robot_z = t1[robot_id*6+1]
+            num_robots_team = int(len(t1)/6)
+            num_robots_against = int(len(t2)/6)
+        else:
+            robot_x = t2[robot_id*6+0]
+            robot_z = t2[robot_id*6+1]
+            num_robots_team = int(len(t2)/6)
+            num_robots_against = int(len(t1)/6)
+
+        same_team_col = False
+        adv_team_col = False
+        wall_col = False
+        #for every robot in robots team
+        for idx in range(num_robots_team):
+            if(self.is_team_yellow):
+                if (idx !=robot_id):
+                    tmp_robot_x = t1[idx*6+0]
+                    tmp_robot_z = t1[idx*6+1]
+                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < 12):
+                        same_team_col = True
+                        break
+            else:
+                if (idx !=robot_id):
+                    tmp_robot_x = t2[idx*6+0]
+                    tmp_robot_z = t2[idx*6+1]
+                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < 12):
+                        same_team_col = True
+                        break
+
+        #for every robot in adversary team
+        for idx in range(num_robots_against):
+            if(self.is_team_yellow):
+                if (idx !=robot_id):
+                    tmp_robot_x = t2[idx*6+0]
+                    tmp_robot_z = t2[idx*6+1]
+                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < 12):
+                        adv_team_col = True
+                        break
+            else:
+                if (idx !=robot_id):
+                    tmp_robot_x = t1[idx*6+0]
+                    tmp_robot_z = t1[idx*6+1]
+                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < 12):
+                        adv_team_col = True
+                        break
+
+        #def wall collision when:
+        #walls z +- 0 ou z +- 130
+        #walls 45 < z < 85 e x +- 0,x+-170 
+        if (robot_z < 6 or robot_z > 124):
+            wall_col = True
+        else:
+            if (robot_z < 51 and robot_z > 79): #outside goal height +- 6
+                if (robot_x < 16 or robot_x > 154): #near goal line walls
+                    wall_col = True
+            else: #inside goal height
+                if (robot_x < 6 or robot_x > 164):
+                    wall_col = True
+
+        return same_team_col, adv_team_col, wall_col
+
+
 
     def parse_state(self, state):
         for idx, ball in enumerate(state.balls):
@@ -345,6 +411,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw,
                                    t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
+        same_team_col, adv_team_col, wall_col = self.check_collision(t1_state, t2_state)
         done = False
 
         reward = 0;
@@ -373,13 +440,13 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             if (self.prev_robot_ball_dist == None):
                 reward = -0.2
             else:
-            	ball_reward = self.prev_robot_ball_dist-robot_ball_dist
-            	goal_reward = self.prev_ball_goal_dist-ball_goal_dist
-            	
-            	dist_scale = (50/robot_ball_dist) #50 is about a quarter of the field diagonal
-            	reward = (ball_reward + 5*goal_reward)*dist_scale - 0.2
-            	if (abs(reward)>15):
-				print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") " + "bal:("+"%.1f"%ball[0]+", %.1f"%ball[1]+") "+ "%.2f" %ball_reward+ ", %.2f" %goal_reward+ ", %.2f" %reward)
+                ball_reward = self.prev_robot_ball_dist-robot_ball_dist
+                goal_reward = self.prev_ball_goal_dist-ball_goal_dist
+                
+                dist_scale = (50/robot_ball_dist) #50 is about a quarter of the field diagonal
+                reward = (ball_reward + 5*goal_reward)*dist_scale - 0.2
+                if (abs(reward)>15):
+                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") " + "bal:("+"%.1f"%ball[0]+", %.1f"%ball[1]+") "+ "%.2f" %ball_reward+ ", %.2f" %goal_reward+ ", %.2f" %reward)
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_goal_dist = ball_goal_dist
 
