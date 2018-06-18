@@ -35,11 +35,11 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         
         self.KRHO = 1
         self.RHO_INC = 30 #increase rho a little bit, so it can catch up with the ball
-        self.KALPHA = 1.5
-        self.KBETA = -3
+        self.KALPHA = 1.8
+        self.KBETA = -0.6
         self.HALF_AXIS = 8
         self.WHEEL_RADIUS = 2
-        self.BALL_X_APPROACH = -3
+        self.BALL_X_APPROACH = -5
         
         self.x = 0
         self.y = 0 
@@ -158,7 +158,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         if global_commands == 0: #default command: carry ball to goal
             goal_x = 165
             goal_y = 65
-            goal_theta = math.atan2((goal_y-self.ball_x),(goal_x-self.ball_y))
+            goal_theta = math.atan2((self.ball_y-goal_y),(self.ball_x-goal_x))
             robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.ball_x+self.BALL_X_APPROACH, self.ball_y, goal_theta, self.RHO_INC)
         else:
             self.dict = {1:(-5,0),
