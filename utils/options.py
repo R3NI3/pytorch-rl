@@ -32,7 +32,7 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans"    # "machine_id"
+        self.machine     = "Hans-Doub-DXDXIncBall"    # "machine_id"
         self.timestamp   = "180612"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
@@ -47,7 +47,7 @@ class Params(object):   # NOTE: shared across all modules
         self.agent_type, self.env_type, self.game, self.model_type, self.memory_type = CONFIGS[self.config]
 
         if self.agent_type == "dqn":
-            self.enable_double_dqn  = False
+            self.enable_double_dqn  = True
             self.enable_dueling     = False
             self.dueling_type       = 'avg' # avg | max | naive
 
