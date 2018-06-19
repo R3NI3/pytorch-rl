@@ -39,7 +39,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.KBETA = -0.75
         self.HALF_AXIS = 8
         self.WHEEL_RADIUS = 2
-        self.BALL_X_APPROACH = -8
+        self.BALL_APPROACH = -5
         self.decAlpha = 0.9
         
         self.x = 0
@@ -159,10 +159,12 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             goal_x = 165
             goal_y = 65
             goal_theta = math.atan2((self.ball_y-goal_y),(self.ball_x-goal_x))
-            robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.ball_x+self.BALL_X_APPROACH, self.ball_y, goal_theta, self.RHO_INC)
+            ball_appr_x = self.ball_x - self.BALL_APPROACH*math.cos(goal_theta)
+            ball_appr_y = self.ball_y - self.BALL_APPROACH*math.sin(goal_theta)
+            robot.left_vel, robot.right_vel = self.getWheelSpeeds(ball_appr_x, ball_appr_y, goal_theta, self.RHO_INC)
             self.target_x = None
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
-            self.send_debug([self.ball_x+self.BALL_X_APPROACH,self.ball_y,goal_theta])
+            #self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
         else:
             self.dict = {1:(-20,0),
                          2:(20,0),
@@ -172,7 +174,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             self.target_x = self.clip(self.target_x + self.dict[global_commands][0], -20, 190)
             self.target_y = self.clip(self.target_y + self.dict[global_commands][1], -20, 150)
             target_theta = math.atan2((self.target_y-self.y),(self.target_x-self.x))
-            self.send_debug([self.target_x,self.target_y,target_theta])
+            #self.send_debug([self.target_x,self.target_y,target_theta])
 
             robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta)
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " DX:%.1f"%(self.target_x)+ " Y:%.1f"%(self.y)+ " DY:%.1f"%(self.target_y)+" DT:%.1f"%math.degrees(target_theta))
@@ -315,6 +317,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #        self.is_rendering = True
     def check_collision(self, t1, t2):
         robot_id = 0
+        COL_DIST=12
         if(self.is_team_yellow):
             robot_x = t1[robot_id*6+0]
             robot_z = t1[robot_id*6+1]
@@ -335,31 +338,29 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 if (idx !=robot_id):
                     tmp_robot_x = t1[idx*6+0]
                     tmp_robot_z = t1[idx*6+1]
-                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < 12):
+                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
                         same_team_col = True
                         break
             else:
                 if (idx !=robot_id):
                     tmp_robot_x = t2[idx*6+0]
                     tmp_robot_z = t2[idx*6+1]
-                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < 12):
+                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
                         same_team_col = True
                         break
 
         #for every robot in adversary team
         for idx in range(num_robots_against):
-            if(self.is_team_yellow):
-                if (idx !=robot_id):
+            if (self.is_team_yellow):
                     tmp_robot_x = t2[idx*6+0]
                     tmp_robot_z = t2[idx*6+1]
-                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < 12):
+                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
                         adv_team_col = True
                         break
             else:
-                if (idx !=robot_id):
                     tmp_robot_x = t1[idx*6+0]
                     tmp_robot_z = t1[idx*6+1]
-                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < 12):
+                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
                         adv_team_col = True
                         break
 
@@ -369,7 +370,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         if (robot_z < 6 or robot_z > 124):
             wall_col = True
         else:
-            if (robot_z < 51 and robot_z > 79): #outside goal height +- 6
+            if (robot_z < 51 or robot_z > 79): #outside goal height +- 6
                 if (robot_x < 16 or robot_x > 154): #near goal line walls
                     wall_col = True
             else: #inside goal height
@@ -412,8 +413,9 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                                    t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
         same_team_col, adv_team_col, wall_col = self.check_collision(t1_state, t2_state)
+        penalty = -0.2 - 0.8*same_team_col - 0.4*wall_col - 0.2*adv_team_col
+        
         done = False
-
         reward = 0;
         if self.is_team_yellow:
             reward = state.goals_yellow - state.goals_blue
@@ -438,15 +440,14 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             ball_goalL_dist = np.linalg.norm(goalL-ball)
             ball_goal_dist = (ball_goalR_dist - ball_goalL_dist)/2
             if (self.prev_robot_ball_dist == None):
-                reward = -0.2
+                reward = penalty
             else:
                 ball_reward = self.prev_robot_ball_dist-robot_ball_dist
                 goal_reward = self.prev_ball_goal_dist-ball_goal_dist
                 
-                dist_scale = (50/robot_ball_dist) #50 is about a quarter of the field diagonal
-                reward = (ball_reward + 5*goal_reward)*dist_scale - 0.2
-                if (abs(reward)>15):
-                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") " + "bal:("+"%.1f"%ball[0]+", %.1f"%ball[1]+") "+ "%.2f" %ball_reward+ ", %.2f" %goal_reward+ ", %.2f" %reward)
+                reward = (0.2*ball_reward + goal_reward) + penalty
+                if (abs(reward)>2):
+                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %ball_reward + ", %.2f" %goal_reward + ", %.2f" %penalty + ", %.2f" %reward)
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_goal_dist = ball_goal_dist
 
