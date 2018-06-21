@@ -32,11 +32,11 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans-Doub-DXDXIncBall"    # "machine_id"
+        self.machine     = "Hans-Normalized"    # "machine_id"
         self.timestamp   = "180612"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
-        self.load_pretrained = False    # load pretrained model if true
+        self.load_pretrained = True    # load pretrained model if true
         self.config      = 9
 
         self.seed        = 123
@@ -191,7 +191,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
-            self.gamma               = 0.75
+            self.gamma               = 0.95
             self.clip_grad           = 1.#np.inf
             self.lr                  = 0.0001
             self.lr_decay            = False

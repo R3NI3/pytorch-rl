@@ -49,7 +49,19 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.target_y = None
         self.ball_x = None
         self.ball_y = None
-
+      
+#        self.maxX = -1000
+#        self.minX = 1000
+#        
+#        self.maxVx = -1000
+#        self.minVx = 1000
+#        
+#        self.maxT = -1000
+#        self.minT = 1000
+#        
+#        self.maxVt = -1000
+#        self.minVt = 1000
+        
     def setup_connections(self, ip='127.0.0.1', port=5555, is_team_yellow = True):
         self.ip = ip
         self.port = port
@@ -315,54 +327,41 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #    if (not self.is_rendering):
         #        self.v = subprocess.Popen([path_viewer, '-p', str(self.port)])
         #        self.is_rendering = True
-    def check_collision(self, t1, t2):
+    def check_collision(self, t_yellow, t_blue):
         robot_id = 0
         COL_DIST=12
         if(self.is_team_yellow):
-            robot_x = t1[robot_id*6+0]
-            robot_z = t1[robot_id*6+1]
-            num_robots_team = int(len(t1)/6)
-            num_robots_against = int(len(t2)/6)
+            robot_x = t_yellow[0].pose.x
+            robot_z = t_yellow[0].pose.y
         else:
-            robot_x = t2[robot_id*6+0]
-            robot_z = t2[robot_id*6+1]
-            num_robots_team = int(len(t2)/6)
-            num_robots_against = int(len(t1)/6)
+            robot_x = t_blue[0].pose.x
+            robot_z = t_blue[0].pose.y
 
         same_team_col = False
         adv_team_col = False
         wall_col = False
+        
         #for every robot in robots team
-        for idx in range(num_robots_team):
-            if(self.is_team_yellow):
-                if (idx !=robot_id):
-                    tmp_robot_x = t1[idx*6+0]
-                    tmp_robot_z = t1[idx*6+1]
-                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
+        for idx, t1_robot in enumerate(t_yellow):
+            tmp_robot_x = t1_robot.pose.x
+            tmp_robot_z = t1_robot.pose.y
+            if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
+                if(self.is_team_yellow):
+                    if (idx !=robot_id):
                         same_team_col = True
-                        break
-            else:
-                if (idx !=robot_id):
-                    tmp_robot_x = t2[idx*6+0]
-                    tmp_robot_z = t2[idx*6+1]
-                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
-                        same_team_col = True
-                        break
+                else:
+                    adv_team_col = True
 
         #for every robot in adversary team
-        for idx in range(num_robots_against):
-            if (self.is_team_yellow):
-                    tmp_robot_x = t2[idx*6+0]
-                    tmp_robot_z = t2[idx*6+1]
-                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
-                        adv_team_col = True
-                        break
-            else:
-                    tmp_robot_x = t1[idx*6+0]
-                    tmp_robot_z = t1[idx*6+1]
-                    if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
-                        adv_team_col = True
-                        break
+        for idx, t2_robot in enumerate(t_blue):
+            tmp_robot_x = t2_robot.pose.x
+            tmp_robot_z = t2_robot.pose.y
+            if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
+                if(not self.is_team_yellow):
+                    if (idx !=robot_id):
+                        same_team_col = True
+                else:
+                    adv_team_col = True
 
         #def wall collision when:
         #walls z +- 0 ou z +- 130
@@ -377,44 +376,61 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 if (robot_x < 6 or robot_x > 164):
                     wall_col = True
 
+        #TODO: test corners
+
         return same_team_col, adv_team_col, wall_col
 
 
+    def normX(self, x):
+        return x/170.0
+    
+    def normVx(self, vx):
+        return (vx+80.0)/(2*80.0)
+    
+    def normT(self, t):
+        return (t+math.pi)/(2*math.pi)
+        
+    def normVt(self, vt):
+        return (vt+10)/(2*10)
 
     def parse_state(self, state):
         for idx, ball in enumerate(state.balls):
             #real values
-            ball_state = (ball.pose.x, ball.pose.y,
-                          ball.v_pose.x, ball.v_pose.y)
+            ball_state = (self.normX(ball.pose.x), self.normX(ball.pose.y),
+                          self.normVx(ball.v_pose.x), self.normVx(ball.v_pose.y))
 
+            self.ball_x = ball.pose.x
+            self.ball_y = ball.pose.y
             #estimated values
-            estimated_ball_state = (ball.k_pose.x, ball.k_pose.y,
-                                    ball.k_v_pose.x, ball.k_v_pose.y)
+            #estimated_ball_state = (ball.k_pose.x, ball.k_pose.y,ball.k_v_pose.x, ball.k_v_pose.y)
 
         t1_state = ()
-        estimated_t1_state = ()
+        #estimated_t1_state = ()
         for idx, t1_robot in enumerate(state.robots_yellow):
             #real values
-            t1_state += (t1_robot.pose.x, t1_robot.pose.y, t1_robot.pose.yaw,
-                         t1_robot.v_pose.x, t1_robot.v_pose.y, t1_robot.v_pose.yaw)
+            t1_state += (self.normX(t1_robot.pose.x), self.normX(t1_robot.pose.y), self.normT(t1_robot.pose.yaw),
+                         self.normVx(t1_robot.v_pose.x), self.normVx(t1_robot.v_pose.y), self.normVt(t1_robot.v_pose.yaw))
+
+            if (idx==0):
+                self.x = t1_robot.pose.x
+                self.y = t1_robot.pose.y
+                self.theta = t1_robot.pose.yaw
 
             #estimated values
-            estimated_t1_state += (t1_robot.k_pose.x, t1_robot.k_pose.y, t1_robot.k_pose.yaw,
-                                   t1_robot.k_v_pose.x, t1_robot.k_v_pose.y, t1_robot.k_v_pose.yaw)
+            #estimated_t1_state += (t1_robot.k_pose.x, t1_robot.k_pose.y, t1_robot.k_pose.yaw,t1_robot.k_v_pose.x, t1_robot.k_v_pose.y, t1_robot.k_v_pose.yaw)
 
         t2_state = ()
-        estimated_t2_state = ()
+        #estimated_t2_state = ()
         for idx, t2_robot in enumerate(state.robots_blue):
             #real values
-            t2_state += (t2_robot.pose.x, t2_robot.pose.y, t2_robot.pose.yaw,
-                         t2_robot.v_pose.x, t2_robot.v_pose.y, t2_robot.v_pose.yaw)
+            t2_state += (self.normX(t2_robot.pose.x), self.normX(t2_robot.pose.y), self.normT(t2_robot.pose.yaw),
+                         self.normVx(t2_robot.v_pose.x), self.normVx(t2_robot.v_pose.y), self.normVt(t2_robot.v_pose.yaw))
             #estimated values
-            estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw,
-                                   t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
+            #estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw, t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
-        same_team_col, adv_team_col, wall_col = self.check_collision(t1_state, t2_state)
-        penalty = -0.2 - 0.8*same_team_col - 0.4*wall_col - 0.2*adv_team_col
-        
+        same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
+        penalty = -0.2 - 1.2*same_team_col - 0.6*wall_col - 0.6*adv_team_col
+
         done = False
         reward = 0;
         if self.is_team_yellow:
@@ -424,17 +440,17 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         if(reward != 0):
             #pdb.set_trace()
-            reward = 1000*reward
+            reward = 100*reward
             done = True
             print("******************GOAL****************")
             print("Reward:"+str(reward))
         elif(state.time >= 10):
             done = True
         else:
-            ball = np.array((ball_state[0],ball_state[1]))
-            goalR = np.array((165,65))
-            goalL = np.array((10,65))
-            rb1 = np.array((t1_state[0],t1_state[1]))
+            ball = np.array((self.ball_x,self.ball_y))
+            goalR = np.array((165,65))#attack goal
+            goalL = np.array((10,65)) #defense goal
+            rb1 = np.array((self.x,self.y))
             robot_ball_dist = np.linalg.norm(ball-rb1)
             ball_goalR_dist = np.linalg.norm(goalR-ball)
             ball_goalL_dist = np.linalg.norm(goalL-ball)
@@ -443,19 +459,16 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 reward = penalty
             else:
                 ball_reward = self.prev_robot_ball_dist-robot_ball_dist
-                goal_reward = self.prev_ball_goal_dist-ball_goal_dist
+                ball_to_goal_reward = self.prev_ball_goal_dist-ball_goal_dist
                 
-                reward = (0.2*ball_reward + goal_reward) + penalty
-                if (abs(reward)>2):
-                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %ball_reward + ", %.2f" %goal_reward + ", %.2f" %penalty + ", %.2f" %reward)
+                if (robot_ball_dist>15):#No donuts if the ball is far
+                    ball_to_goal_reward = 0
+
+                reward = (0.1*ball_reward + ball_to_goal_reward) + penalty
+                if (abs(reward)>1):
+                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.1*ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward)
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_goal_dist = ball_goal_dist
-
-        self.x = t1_state[0]
-        self.y = t1_state[1]
-        self.theta = t1_state[2]
-        self.ball_x = ball_state[0]
-        self.ball_y = ball_state[1]
 
         #print("lin:%.1f"%self.speed_lin+"\tang:%.1f"%self.speed_ang)
         #print(t1_state)
@@ -464,10 +477,28 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #time.sleep(0.100)#200ms
 
         env_state = ball_state + t1_state + t2_state
+        
+#        self.maxX = max(self.maxX, t1_state[0], t1_state[1])
+#        self.minX = min(self.minX, t1_state[0], t1_state[1])
+#
+#        self.maxT = max(self.maxT, t1_state[2])
+#        self.minT = min(self.minT, t1_state[2])
+#        
+#        self.maxVx = max(self.maxVx, t1_state[3], t1_state[4])
+#        self.minVx = min(self.minVx, t1_state[3], t1_state[4])
+#       
+#        self.maxVt = max(self.maxVt, t1_state[5])
+#        self.minVt = min(self.minVt, t1_state[5])  
+#        
+#        print ("X: (%.2f"%t1_state[0]+",%.2f"%t1_state[1]+") Vx: (%.2f"%t1_state[3]+",%.2f"%t1_state[4]+") T: (%.2f"%t1_state[2]+") Vt: (%.2f"%t1_state[5]+")")
+#        print ("X: (%.2f"%self.maxX+",%.2f"%self.minX+") Vx: (%.2f"%self.maxVx+",%.2f"%self.minVx+") T: (%.2f"%self.maxT+",%.2f"%self.minT+") Vt: (%.2f"%self.maxVt+",%.2f"%self.minVt+")")
         #unused infos
         #state.name_yellow
         #state.name_blue
         #print(state.time)
 
         return np.array(env_state), reward, done
+
+
+
 
