@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jun 21 21:41:11 2018
+
+@author: hans
+"""
+
+import pygame
+from pygame.locals import *
+
 from core.envs.vss_interface.command_pb2 import *
 from core.envs.vss_interface.debug_pb2 import *
 from core.envs.vss_interface.state_pb2 import *
@@ -8,6 +18,7 @@ import pdb
 import zmq
 import google.protobuf.text_format
 import gym
+import gym.spaces
 from gym import error, spaces
 from gym import utils
 from gym.utils import seeding
@@ -19,10 +30,10 @@ import signal
 
 path_viewer = 'vss_sim/VSS-Viewer'
 path_simulator = 'vss_sim/VSS-Simulator'
-command_rate = 100 #ms
-cmd_wait = 0.050 #s
+command_rate = 50 #ms
+cmd_wait = 0 #s
 
-class SoccerEnv(gym.Env, utils.EzPickle):
+class KeyboardControl:
     def __init__(self):
         #start simulator and viewer
         self.is_rendering = False
@@ -176,12 +187,13 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             goal_theta = math.atan2((self.ball_y-goal_y),(self.ball_x-goal_x))
             rho  = np.sqrt((self.ball_x-self.x)*(self.ball_x-self.x) + (self.ball_y-self.y)*(self.ball_y-self.y))
             apr = max(self.BALL_APPROACH,-rho/2)
+            print("apr:%.1f"%apr, "rho:%.1f"%rho)
             ball_appr_x = self.ball_x - apr*math.cos(goal_theta)
             ball_appr_y = self.ball_y - (apr/2)*math.sin(goal_theta)
             robot.left_vel, robot.right_vel = self.getWheelSpeeds(ball_appr_x, ball_appr_y, goal_theta, self.KRHO, self.RHO_INC)
             #self.target_x = None
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
-            #self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
+            self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
         else:
             self.dict = {1:(5,0),
                          2:(-5,0),
@@ -455,11 +467,12 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         if(reward != 0):
             #pdb.set_trace()
             reward = 100*reward
-            done = True
-            print("******************GOAL****************")
-            print("Reward:"+str(reward))
+            #done = True
+            #print("******************GOAL****************")
+            #print("Reward:"+str(reward))
         elif(state.time >= 10):
-            done = True
+            #done = True
+            pass
         else:
             ball = np.array((self.ball_x,self.ball_y))
             rb1 = np.array((self.x,self.y))
@@ -479,8 +492,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                     ball_to_goal_reward = 0
 
                 reward = (0.1*robot_to_ball_reward + ball_to_goal_reward) + penalty
-                if (abs(reward)>2):
-                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.1*robot_to_ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward)
+                #if (abs(reward)>1):
+                #    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.1*robot_to_ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward)
 
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_potential = ball_potential
@@ -513,6 +526,65 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         return np.array(env_state), reward, done
 
+    def display(self,str_):
+        text = self.font.render(str_, True, (255, 255, 255), (159, 182, 205))
+        textRect = text.get_rect()
+        textRect.centerx = self.screen.get_rect().centerx
+        textRect.centery = self.screen.get_rect().centery
+    
+        self.screen.blit(text, textRect)
+        pygame.display.update()
+    
+    def loop(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode( (640,480) )
+        pygame.display.set_caption('Python numbers')
+        self.screen.fill((159, 182, 205))
+    
+        self.font = pygame.font.Font(None, 17)
 
+        done = False
+        while not done:
+            rcvd_state = self.receive_state()
+            while rcvd_state == None:
+                rcvd_state = self.receive_state()
+    
+            pygame.event.pump()
+            keys = pygame.key.get_pressed()
+            key = ""
+            cmd = 5
+            if keys[K_q]:
+                done = True
+                print("quit")
+            elif keys[K_a]:
+                key = "a"
+                cmd = 0
+                print(key, cmd)
+            elif keys[K_LEFT]:
+                key = "<"
+                cmd = 1
+                print(key, cmd)
+            elif keys[K_RIGHT]:
+                key = ">"
+                cmd = 2
+                print(key, cmd)
+            elif keys[K_UP]:
+                key = "A"
+                cmd = 3
+                print(key, cmd)
+            elif keys[K_DOWN]:
+                key = "v"
+                cmd = 4
+                print(key, cmd)
+            
+            self.display(str(key))
+        
+            self.send_commands(cmd)
+            time.sleep(cmd_wait)#wait for the command to became effective
+            
+            #prev_state = last_state    
+            last_state, reward, _ = self.parse_state(rcvd_state)
 
-
+kcontrol = KeyboardControl()
+kcontrol.setup_connections(port=7777)
+kcontrol.loop()
