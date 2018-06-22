@@ -36,7 +36,7 @@ class Params(object):   # NOTE: shared across all modules
         self.timestamp   = "180612"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
-        self.load_pretrained = False    # load pretrained model if true
+        self.load_pretrained = True    # load pretrained model if true
         self.config      = 9
 
         self.seed        = 123

@@ -198,10 +198,11 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             robot.left_vel = self.linearSpeed - self.angularSpeed
             robot.right_vel  = self.linearSpeed + self.angularSpeed
             
-        self.linearSpeed = self.linearSpeed*self.decLin
-        self.angularSpeed = self.angularSpeed*self.decAng
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " DX:%.1f"%(self.target_x)+ " Y:%.1f"%(self.y)+ " DY:%.1f"%(self.target_y)+" DT:%.1f"%math.degrees(target_theta))
+
+        self.linearSpeed = self.linearSpeed*self.decLin
+        self.angularSpeed = self.angularSpeed*self.decAng
 
         #print("lin:"+str(self.speed_lin)+"\tang:"+str(self.speed_ang)+"\tvel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]")
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
@@ -276,7 +277,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         time.sleep(cmd_wait)#wait for the command to became effective
         rcvd_state = self.receive_state()
         while rcvd_state == None:
-            self.reset()
+            #self.reset()
             rcvd_state = self.receive_state()
         
         #prev_state = self.last_state    
@@ -443,7 +444,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw, t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
         same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
-        penalty = -0.2 - 1.2*same_team_col - 0.6*wall_col - 0.6*adv_team_col
+        penalty = -0.2 - 2*same_team_col - 1*wall_col - 1*adv_team_col
 
         done = False
         reward = 0;
@@ -454,7 +455,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         if(reward != 0):
             #pdb.set_trace()
-            reward = 100*reward
+            reward = 500*reward
             done = True
             print("******************GOAL****************")
             print("Reward:"+str(reward))
