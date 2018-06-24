@@ -30,8 +30,8 @@ import signal
 
 path_viewer = 'vss_sim/VSS-Viewer'
 path_simulator = 'vss_sim/VSS-Simulator'
-command_rate = 50 #ms
-cmd_wait = 0 #s
+command_rate = 100 #ms
+cmd_wait = 0.000 #s
 
 class KeyboardControl:
     def __init__(self):
@@ -51,7 +51,7 @@ class KeyboardControl:
         self.BALL_APPROACH = -20
         self.decAlpha = 0.3
         self.decLin = 0.9
-        self.decAng = 0.75
+        self.decAng = 0.6
         
         self.x = 0
         self.y = 0 
@@ -178,7 +178,9 @@ class KeyboardControl:
 #        else: # Apply decrements
 #            self.target_x = self.target_x*self.decAlpha + self.x*(1-self.decAlpha)
 #            self.target_y = self.target_y*self.decAlpha + self.y*(1-self.decAlpha)
-
+        self.linearSpeed = self.linearSpeed*self.decLin
+        self.angularSpeed = self.angularSpeed*self.decAng
+ 
         #global_commands = 0
 
         if global_commands == 0: #default command: carry ball to goal
@@ -195,10 +197,10 @@ class KeyboardControl:
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
             self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
         else:
-            self.dict = {1:(5,0),
-                         2:(-5,0),
-                         3:(0,6),
-                         4:(0,-6),
+            self.dict = {1:(4,0),
+                         2:(-4,0),
+                         3:(0,5),
+                         4:(0,-5),
                          5:(0,0)
                         }
             #self.target_x = self.clip(self.target_x + self.dict[global_commands][0], -20, 190)
@@ -209,13 +211,12 @@ class KeyboardControl:
             self.angularSpeed = self.clip(self.angularSpeed + self.dict[global_commands][0],-60,60)
             robot.left_vel = self.linearSpeed - self.angularSpeed
             robot.right_vel  = self.linearSpeed + self.angularSpeed
+
+        print("lin1:%.1f"%self.linearSpeed+"\tang1:%.1f"%self.angularSpeed)
             
-        self.linearSpeed = self.linearSpeed*self.decLin
-        self.angularSpeed = self.angularSpeed*self.decAng
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " DX:%.1f"%(self.target_x)+ " Y:%.1f"%(self.y)+ " DY:%.1f"%(self.target_y)+" DT:%.1f"%math.degrees(target_theta))
 
-        #print("lin:"+str(self.speed_lin)+"\tang:"+str(self.speed_ang)+"\tvel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]")
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
         for i in range(2):
             robot = c.robot_commands.add()
@@ -442,6 +443,13 @@ class KeyboardControl:
                 self.y = t1_robot.pose.y
                 self.theta = t1_robot.pose.yaw
 
+                self.linearSpeed = math.sqrt(t1_robot.v_pose.x*t1_robot.v_pose.x + t1_robot.v_pose.y*t1_robot.v_pose.y)
+                if (abs(math.atan2(t1_robot.v_pose.y,t1_robot.v_pose.x)-self.theta)>math.pi/2):
+                    self.linearSpeed = - self.linearSpeed
+                
+                angularSpeed = t1_robot.v_pose.yaw*8/1.63 # VangWheel = vang*RobotWidth/WheelRadius
+                print("lin2:%.1f"%self.linearSpeed+"\tang2:%.1f"%self.angularSpeed)
+
             #estimated values
             #estimated_t1_state += (t1_robot.k_pose.x, t1_robot.k_pose.y, t1_robot.k_pose.yaw,t1_robot.k_v_pose.x, t1_robot.k_v_pose.y, t1_robot.k_v_pose.yaw)
 
@@ -542,7 +550,7 @@ class KeyboardControl:
         self.screen.fill((159, 182, 205))
     
         self.font = pygame.font.Font(None, 17)
-
+        
         done = False
         while not done:
             rcvd_state = self.receive_state()
@@ -581,6 +589,9 @@ class KeyboardControl:
         
             self.send_commands(cmd)
             time.sleep(cmd_wait)#wait for the command to became effective
+            for e in pygame.event.get(): 
+                pass # proceed other events. 
+                # always call event.get() or event.poll() in the main loop
             
             #prev_state = last_state    
             last_state, reward, _ = self.parse_state(rcvd_state)

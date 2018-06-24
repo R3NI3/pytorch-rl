@@ -32,11 +32,11 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans-NormVLinAng"    # "machine_id"
-        self.timestamp   = "180612"   # "yymmdd##"
+        self.machine     = "Hans-Gama08"    # "machine_id"
+        self.timestamp   = "180622"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
-        self.load_pretrained = True    # load pretrained model if true
+        self.load_pretrained = False    # load pretrained model if true
         self.config      = 9
 
         self.seed        = 123
@@ -48,7 +48,7 @@ class Params(object):   # NOTE: shared across all modules
 
         if self.agent_type == "dqn":
             self.enable_double_dqn  = True
-            self.enable_dueling     = False
+            self.enable_dueling     = True
             self.dueling_type       = 'avg' # avg | max | naive
 
             if self.env_type == "gym":
@@ -56,7 +56,7 @@ class Params(object):   # NOTE: shared across all modules
                 self.hidden_dim     = 16
             else:
                 self.hist_len       = 1
-                self.hidden_dim     = 256
+                self.hidden_dim     = 512
 
             self.use_cuda           = torch.cuda.is_available()
             self.dtype              = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
@@ -191,9 +191,9 @@ class AgentParams(Params):  # hyperparameters for drl agents
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
-            self.gamma               = 0.95
+            self.gamma               = 0.8
             self.clip_grad           = 40.#np.inf
-            self.lr                  = 0.01
+            self.lr                  = 0.001
             self.lr_decay            = False
             self.weight_decay        = 0.
             self.eval_freq           = 1000     # NOTE: here means every this many steps
@@ -201,7 +201,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.prog_freq           = self.eval_freq
             self.test_nepisodes      = 1
 
-            self.learn_start         = 500      # start update params after this many steps
+            self.learn_start         = 5000     # start update params after this many steps
             self.batch_size          = 32
             self.valid_size          = 250
             self.eps_start           = 1

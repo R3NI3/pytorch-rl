@@ -40,7 +40,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.BALL_APPROACH = -20
         self.decAlpha = 0.3
         self.decLin = 0.9
-        self.decAng = 0.75
+        self.decAng = 0.6
         
         self.x = 0
         self.y = 0 
@@ -169,6 +169,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 #            self.target_y = self.target_y*self.decAlpha + self.y*(1-self.decAlpha)
 
         #global_commands = 0
+        self.linearSpeed = self.linearSpeed*self.decLin
+        self.angularSpeed = self.angularSpeed*self.decAng
 
         if global_commands == 0: #default command: carry ball to goal
             goal_x = 165
@@ -183,10 +185,10 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
             #self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
         else:
-            self.dict = {1:(5,0),
-                         2:(-5,0),
-                         3:(0,6),
-                         4:(0,-6),
+            self.dict = {1:(4,0),
+                         2:(-4,0),
+                         3:(0,5),
+                         4:(0,-5),
                          5:(0,0)
                         }
             #self.target_x = self.clip(self.target_x + self.dict[global_commands][0], -20, 190)
@@ -200,9 +202,6 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " DX:%.1f"%(self.target_x)+ " Y:%.1f"%(self.y)+ " DY:%.1f"%(self.target_y)+" DT:%.1f"%math.degrees(target_theta))
-
-        self.linearSpeed = self.linearSpeed*self.decLin
-        self.angularSpeed = self.angularSpeed*self.decAng
 
         #print("lin:"+str(self.speed_lin)+"\tang:"+str(self.speed_ang)+"\tvel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]")
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
@@ -430,6 +429,11 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 self.x = t1_robot.pose.x
                 self.y = t1_robot.pose.y
                 self.theta = t1_robot.pose.yaw
+                self.linearSpeed = math.sqrt(t1_robot.v_pose.x*t1_robot.v_pose.x + t1_robot.v_pose.y*t1_robot.v_pose.y)
+                if (abs(math.atan2(t1_robot.v_pose.y,t1_robot.v_pose.x)-self.theta)>math.pi/2):
+                    self.linearSpeed = - self.linearSpeed
+                
+                angularSpeed = t1_robot.v_pose.yaw*8/1.63 # VangWheel = vang*RobotWidth/WheelRadius
 
             #estimated values
             #estimated_t1_state += (t1_robot.k_pose.x, t1_robot.k_pose.y, t1_robot.k_pose.yaw,t1_robot.k_v_pose.x, t1_robot.k_v_pose.y, t1_robot.k_v_pose.yaw)
