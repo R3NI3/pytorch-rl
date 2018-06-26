@@ -30,15 +30,16 @@ class DQNMlpModel(Model):
         self._reset()
 
     def _init_weights(self):
-        # self.apply(init_weights)
-        # self.fc1.weight.data = normalized_columns_initializer(self.fc1.weight.data, 0.01)
-        # self.fc1.bias.data.fill_(0)
-        # self.fc2.weight.data = normalized_columns_initializer(self.fc2.weight.data, 0.01)
-        # self.fc2.bias.data.fill_(0)
-        # self.fc3.weight.data = normalized_columns_initializer(self.fc3.weight.data, 0.01)
-        # self.fc3.bias.data.fill_(0)
-        # self.fc4.weight.data = normalized_columns_initializer(self.fc4.weight.data, 0.01)
-        # self.fc4.bias.data.fill_(0)
+#        print("\n########### INIT MODEL ###########\n")
+#        self.apply(init_weights)
+#        self.fc1.weight.data = normalized_columns_initializer(self.fc1.weight.data, 0.01)
+#        self.fc1.bias.data.fill_(0)
+#        self.fc2.weight.data = normalized_columns_initializer(self.fc2.weight.data, 0.01)
+#        self.fc2.bias.data.fill_(0)
+#        self.fc3.weight.data = normalized_columns_initializer(self.fc3.weight.data, 0.01)
+#        self.fc3.bias.data.fill_(0)
+#        self.fc4.weight.data = normalized_columns_initializer(self.fc4.weight.data, 0.01)
+#        self.fc4.bias.data.fill_(0)
         pass
 
     def forward(self, x):

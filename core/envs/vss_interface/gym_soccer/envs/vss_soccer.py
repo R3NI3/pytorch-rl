@@ -19,7 +19,7 @@ import signal
 
 path_viewer = 'vss_sim/VSS-Viewer'
 path_simulator = 'vss_sim/VSS-Simulator'
-command_rate = 100 #ms
+command_rate = 500 #ms
 cmd_wait = 0.050 #s
 
 class SoccerEnv(gym.Env, utils.EzPickle):
@@ -31,10 +31,10 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #self.last_state = np.array((0,0,0,0)+(0,0,0,0,0,0)+(0,0,0,0,0,0))
         self.cmd = 3
         
-        self.KRHO = 4
+        self.KRHO = 1.5
         self.RHO_INC = 10 #increase rho a little bit, so it can catch up with the ball
-        self.KALPHA = 5
-        self.KBETA = -0.5
+        self.KALPHA = 4
+        self.KBETA = -0.4
         self.HALF_AXIS = 8
         self.WHEEL_RADIUS = 2
         self.BALL_APPROACH = -20
@@ -53,6 +53,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.prev_robot_ball_dist = None
         self.linearSpeed = 0
         self.angularSpeed = 0
+        self.send_time = None
 #        self.maxX = -1000
 #        self.minX = 1000
 #        
@@ -153,6 +154,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         return int(base * round(float(x)/base))
     
     def send_commands(self, global_commands):
+        #print(".")
         c = Global_Commands()
         c.id = 0
         c.is_team_yellow = self.is_team_yellow
@@ -168,7 +170,13 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 #            self.target_x = self.target_x*self.decAlpha + self.x*(1-self.decAlpha)
 #            self.target_y = self.target_y*self.decAlpha + self.y*(1-self.decAlpha)
 
-        #global_commands = 0
+#        if (self.cmd == 1):
+#            self.cmd = 2
+#        else:
+#            self.cmd = 1
+#            
+        #global_commands = 0#self.cmd
+        
         self.linearSpeed = self.linearSpeed*self.decLin
         self.angularSpeed = self.angularSpeed*self.decAng
 
@@ -185,10 +193,10 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
             #self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
         else:
-            self.dict = {1:(4,0),
-                         2:(-4,0),
-                         3:(0,5),
-                         4:(0,-5),
+            self.dict = {1:(10,0),
+                         2:(-10,0),
+                         3:(0,10),
+                         4:(0,-10),
                          5:(0,0)
                         }
             #self.target_x = self.clip(self.target_x + self.dict[global_commands][0], -20, 190)
@@ -203,7 +211,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " DX:%.1f"%(self.target_x)+ " Y:%.1f"%(self.y)+ " DY:%.1f"%(self.target_y)+" DT:%.1f"%math.degrees(target_theta))
 
-        #print("lin:"+str(self.speed_lin)+"\tang:"+str(self.speed_ang)+"\tvel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]")
+        #print("lin:"+str(self.linearSpeed)+"\tang:"+str(self.angularSpeed)+"\tvel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]")
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
         for i in range(2):
             robot = c.robot_commands.add()
@@ -271,12 +279,24 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         else:
             self.socket_debug2.send(buf)
 
+    def commandWait(self):
+#        now = time.time()
+#        if (self.send_time==None):
+#            time.sleep(cmd_wait)#wait for the command to became effective
+#        else:
+#            dt = (now - self.send_time) #seconds
+#            print("dt:%d"%(dt*1000))
+#            if (dt<cmd_wait):
+#               time.sleep(dt)
+#        self.send_time = now
+        time.sleep(cmd_wait)
+
     def step(self, global_commands):
         self.send_commands(global_commands)
-        time.sleep(cmd_wait)#wait for the command to became effective
+        self.commandWait()        
         rcvd_state = self.receive_state()
         while rcvd_state == None:
-            #self.reset()
+            self.reset()
             rcvd_state = self.receive_state()
         
         #prev_state = self.last_state    
@@ -322,7 +342,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator,  '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 
@@ -483,13 +503,13 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 if (robot_ball_dist>15):#No donuts if the ball is far
                     ball_to_goal_reward = 0
 
-                reward = (0.1*robot_to_ball_reward + ball_to_goal_reward) + penalty
+                reward = ((0.2*robot_to_ball_reward + ball_to_goal_reward) + penalty)
                 if (abs(reward)>2):
-                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.1*robot_to_ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward)
+                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.2*robot_to_ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward)
 
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_potential = ball_potential
-        #print("lin:%.1f"%self.speed_lin+"\tang:%.1f"%self.speed_ang)
+        #print("lin:%.1f"%self.linearSpeed+"\tang:%.1f"%self.angularSpeed)
         #print(t1_state)
 
         #print("Reward:"+str(reward))
@@ -516,7 +536,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #state.name_blue
         #print(state.time)
 
-        return np.array(env_state), reward, done
+        return np.array(env_state), reward/600.0, done
 
 
 

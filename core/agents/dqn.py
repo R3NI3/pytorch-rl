@@ -248,6 +248,7 @@ class DQNAgent(Agent):
         should_start_new = True
         while self.step < self.steps:
             if should_start_new:    # start of a new episode
+                print("\n****** New Train Episode ******\nStep:%d"%self.step+" eps:%.1f"%self.eps)
                 episode_steps = 0
                 episode_reward = 0.
                 # Obtain the initial observation by resetting the environment
@@ -326,7 +327,7 @@ class DQNAgent(Agent):
                 should_start_new = True
 
     def _eval_model(self):
-        self.training = False
+        self.training = True
         eval_step = 0
 
         eval_nepisodes = 0
@@ -338,6 +339,7 @@ class DQNAgent(Agent):
         eval_should_start_new = True
         while eval_step < self.eval_steps:
             if eval_should_start_new:   # start of a new episode
+                print("\n****** Eval Model ******\nStep:%d"%eval_step+" eps:%.1f"%self.eps)
                 eval_episode_steps = 0
                 eval_episode_reward = 0.
                 # Obtain the initial observation by resetting the environment
@@ -453,6 +455,7 @@ class DQNAgent(Agent):
         test_should_start_new = True
         while test_nepisodes < self.test_nepisodes:
             if test_should_start_new:   # start of a new episode
+                print("\n****** Test Model ******\nStep:%d"%test_nepisodes+" eps:%.1f"%self.eps)
                 test_episode_steps = 0
                 test_episode_reward = 0.
                 # Obtain the initial observation by resetting the environment
