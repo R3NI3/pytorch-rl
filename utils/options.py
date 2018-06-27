@@ -32,11 +32,11 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans-GamaReward600"    # "machine_id"
+        self.machine     = "Hans-GamaClip2lr001"    # "machine_id"
         self.timestamp   = "180622"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
-        self.load_pretrained = True    # load pretrained model if true
+        self.load_pretrained = False    # load pretrained model if true
         self.config      = 9
 
         self.seed        = 123
@@ -193,7 +193,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.early_stop          = None     # max #steps per episode
             self.gamma               = 0.95
             self.clip_grad           = 40.#np.inf
-            self.lr                  = 0.00001
+            self.lr                  = 0.00025
             self.lr_decay            = False
             self.weight_decay        = 0.
             self.eval_freq           = 1000     # NOTE: here means every this many steps
@@ -205,8 +205,8 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.batch_size          = 32
             self.valid_size          = 250
             self.eps_start           = 1
-            self.eps_end             = 0.3
-            self.eps_eval            = 0.3
+            self.eps_end             = 0.2
+            self.eps_eval            = 0
             self.eps_decay           = 100000
             self.target_model_update = 500#0.0001
             self.action_repetition   = 1

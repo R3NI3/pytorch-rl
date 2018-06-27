@@ -468,7 +468,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw, t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
         same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
-        penalty = -0.2 - 2*same_team_col - 1*wall_col - 1*adv_team_col
+        penalty = -0.2 - 0.2*same_team_col - 0.1*wall_col - 0.1*adv_team_col
 
         done = False
         reward = 0;
@@ -500,8 +500,11 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 robot_to_ball_reward = self.prev_robot_ball_dist-robot_ball_dist
                 #print(".rob:("+"%.1f"%self.ball_x+ ", %.1f"%self.ball_y+") %.2f"%ball_to_goal_reward)
 
-                if (robot_ball_dist>15):#No donuts if the ball is far
+                if (robot_ball_dist>15 or ball_to_goal_reward<0):#No donuts if the ball is far
                     ball_to_goal_reward = 0
+                    
+                if (robot_to_ball_reward<0):
+                    robot_to_ball_reward = 0
 
                 reward = ((0.2*robot_to_ball_reward + ball_to_goal_reward) + penalty)
                 if (abs(reward)>2):
