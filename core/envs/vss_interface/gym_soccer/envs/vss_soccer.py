@@ -19,8 +19,8 @@ import signal
 
 path_viewer = 'vss_sim/VSS-Viewer'
 path_simulator = 'vss_sim/VSS-Simulator'
-command_rate = 500 #ms
-cmd_wait = 0.050 #s
+command_rate = 300 #ms
+cmd_wait = 266 # 1/4 of 60 frames x (1s in ms)/fps  
 
 class SoccerEnv(gym.Env, utils.EzPickle):
     def __init__(self):
@@ -53,7 +53,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.prev_robot_ball_dist = None
         self.linearSpeed = 0
         self.angularSpeed = 0
-        self.send_time = None
+        self.send_time = 0
 #        self.maxX = -1000
 #        self.minX = 1000
 #        
@@ -83,6 +83,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b'')
         self.socket_state.setsockopt(zmq.LINGER, 0)
         self.socket_state.setsockopt(zmq.RCVTIMEO, 5000)
+        self.socket_state.setsockopt(zmq.CONFLATE, 1)
 
         # commands socket
         self.socket_com1 = self.context.socket(zmq.PAIR) #socket to Team 1
@@ -126,26 +127,31 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #self.render(close=True)
 
     def receive_state(self):
-        try:
-            state = Global_State()
-            msg = self.socket_state.recv()
-            state.ParseFromString(msg)
-            count = 0
-            while(count < 100):
-                socks = dict(self.poller.poll(10))
-                if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
-                    #discard messages
-                    msg = self.socket_state.recv()
-                    state.ParseFromString(msg)
-                    count += 1
-                    #print("discard");
-                else:
-                    break
-            return state
-        except Exception as e:
-            print("caught timeout:"+str(e))
-             
-        return None
+        state = None
+        
+        while state == None:
+            try:
+                state = Global_State()
+                msg = self.socket_state.recv()
+                state.ParseFromString(msg)
+                count = 0
+                while(count < 100):
+                    socks = dict(self.poller.poll(10))
+                    if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
+                        #discard messages
+                        msg = self.socket_state.recv()
+                        state.ParseFromString(msg)
+                        count += 1
+                        #print("discard");
+                    else:
+                        break
+                return state
+            except Exception as e:
+                print("caught timeout:"+str(e))
+                self.reset()
+                state = None
+
+        return state
 
     def clip(self, val, vmin, vmax):
         return min(max(val, vmin), vmax)
@@ -155,6 +161,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
     
     def send_commands(self, global_commands):
         #print(".")
+        self.cmd = global_commands
         c = Global_Commands()
         c.id = 0
         c.is_team_yellow = self.is_team_yellow
@@ -279,25 +286,21 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         else:
             self.socket_debug2.send(buf)
 
-    def commandWait(self):
-#        now = time.time()
-#        if (self.send_time==None):
-#            time.sleep(cmd_wait)#wait for the command to became effective
-#        else:
-#            dt = (now - self.send_time) #seconds
-#            print("dt:%d"%(dt*1000))
-#            if (dt<cmd_wait):
-#               time.sleep(dt)
-#        self.send_time = now
-        time.sleep(cmd_wait)
-
     def step(self, global_commands):
+        #send the command:
         self.send_commands(global_commands)
-        self.commandWait()        
-        rcvd_state = self.receive_state()
-        while rcvd_state == None:
-            self.reset()
+        #register current simulation timestamp:
+        sentTime = self.receive_state().time
+        #wait until the espected timestamp arrives
+        currentTime = sentTime
+        while currentTime<sentTime+cmd_wait:
             rcvd_state = self.receive_state()
+            currentTime = rcvd_state.time
+        
+        #print("t1:%d"%sentTime, "t2:%d"%currentTime, "dt:%d"%(currentTime-sentTime))
+        #print("t1:%d"%self.send_time, "t2:%d"%currentTime, "dt:%d"%(currentTime-self.send_time))
+        #print("dt_cmd:%d"%(currentTime-sentTime), "dt_step:%d"%(currentTime-self.send_time))
+        #self.send_time = currentTime
         
         #prev_state = self.last_state    
         self.last_state, reward, done = self.parse_state(rcvd_state)
@@ -453,7 +456,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 if (abs(math.atan2(t1_robot.v_pose.y,t1_robot.v_pose.x)-self.theta)>math.pi/2):
                     self.linearSpeed = - self.linearSpeed
                 
-                angularSpeed = t1_robot.v_pose.yaw*8/1.63 # VangWheel = vang*RobotWidth/WheelRadius
+                self.angularSpeed = t1_robot.v_pose.yaw*8/1.63 # VangWheel = vang*RobotWidth/WheelRadius
 
             #estimated values
             #estimated_t1_state += (t1_robot.k_pose.x, t1_robot.k_pose.y, t1_robot.k_pose.yaw,t1_robot.k_v_pose.x, t1_robot.k_v_pose.y, t1_robot.k_v_pose.yaw)
@@ -468,7 +471,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw, t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
         same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
-        penalty = -0.2 - 0.2*same_team_col - 0.1*wall_col - 0.1*adv_team_col
+        penalty = -0.2/(1+abs(self.linearSpeed)) - 0.2*same_team_col - 0.1*wall_col - 0.1*adv_team_col
 
         done = False
         reward = 0;
@@ -483,8 +486,6 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             done = True
             print("******************GOAL****************")
             print("Reward:"+str(reward))
-        elif(state.time >= 10):
-            done = True
         else:
             ball = np.array((self.ball_x,self.ball_y))
             rb1 = np.array((self.x,self.y))
@@ -508,7 +509,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
                 reward = ((0.2*robot_to_ball_reward + ball_to_goal_reward) + penalty)
                 if (abs(reward)>2):
-                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.2*robot_to_ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward)
+                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.2*robot_to_ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward + " cmd:%d"%self.cmd)
 
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_potential = ball_potential

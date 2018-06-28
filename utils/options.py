@@ -32,7 +32,7 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans-GamaClip2lr001"    # "machine_id"
+        self.machine     = "Hans-GamaClip40lr00025hl2"    # "machine_id"
         self.timestamp   = "180622"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
@@ -55,7 +55,7 @@ class Params(object):   # NOTE: shared across all modules
                 self.hist_len       = 1
                 self.hidden_dim     = 16
             else:
-                self.hist_len       = 1
+                self.hist_len       = 2
                 self.hidden_dim     = 512
 
             self.use_cuda           = torch.cuda.is_available()
@@ -206,7 +206,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.valid_size          = 250
             self.eps_start           = 1
             self.eps_end             = 0.2
-            self.eps_eval            = 0
+            self.eps_eval            = 0.1
             self.eps_decay           = 100000
             self.target_model_update = 500#0.0001
             self.action_repetition   = 1
