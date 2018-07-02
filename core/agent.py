@@ -72,6 +72,8 @@ class Agent(object):
             self.action_repetition = args.action_repetition
             self.memory_interval = args.memory_interval
             self.train_interval = args.train_interval
+            self.minSampleProb       = args.minSampleProb
+            self.rewardRangeScale    = args.rewardRangeScale
         elif args.agent_type == "a3c":
             self.enable_log_at_train_step = args.enable_log_at_train_step
 

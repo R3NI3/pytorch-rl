@@ -19,7 +19,7 @@ import signal
 
 path_viewer = 'vss_sim/VSS-Viewer'
 path_simulator = 'vss_sim/VSS-Simulator'
-command_rate = 300 #ms
+command_rate = 330 #ms
 cmd_wait = 266 # 1/4 of 60 frames x (1s in ms)/fps  
 
 class SoccerEnv(gym.Env, utils.EzPickle):
@@ -75,6 +75,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
+        self.socket_state.setsockopt(zmq.CONFLATE, 1)
         self.socket_state.connect ("tcp://localhost:%d" % port)
         #self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b"")#allow every topic
         try:
@@ -83,7 +84,6 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b'')
         self.socket_state.setsockopt(zmq.LINGER, 0)
         self.socket_state.setsockopt(zmq.RCVTIMEO, 5000)
-        self.socket_state.setsockopt(zmq.CONFLATE, 1)
 
         # commands socket
         self.socket_com1 = self.context.socket(zmq.PAIR) #socket to Team 1
@@ -104,7 +104,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         shape = len(self.last_state)
         #todo fix obs and action spaces
         self.observation_space = spaces.Box(low=-200, high=200, dtype=np.float32, shape=(shape,))
-        self.action_space = spaces.Box(low=-100, high=100, dtype=np.float32, shape=(5,)) #wheels velocities
+        self.action_space = spaces.Box(low=-100, high=100, dtype=np.float32, shape=(6,)) #wheels velocities
 
         # Initialize poll set
         self.poller.register(self.socket_state, zmq.POLLIN)
@@ -296,6 +296,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         while currentTime<sentTime+cmd_wait:
             rcvd_state = self.receive_state()
             currentTime = rcvd_state.time
+            if (currentTime<sentTime): # a simulator crash and restart?
+                break
         
         #print("t1:%d"%sentTime, "t2:%d"%currentTime, "dt:%d"%(currentTime-sentTime))
         #print("t1:%d"%self.send_time, "t2:%d"%currentTime, "dt:%d"%(currentTime-self.send_time))
@@ -417,16 +419,15 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         return same_team_col, adv_team_col, wall_col
 
-
     def normX(self, x):
         return x/170.0
-    
+
     def normVx(self, vx):
         return (vx+80.0)/(2*80.0)
-    
+
     def normT(self, t):
         return (t+math.pi)/(2*math.pi)
-        
+
     def normVt(self, vt):
         return (vt+10)/(2*10)
 
@@ -470,9 +471,6 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #estimated values
             #estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw, t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
-        same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
-        penalty = -0.2/(1+abs(self.linearSpeed)) - 0.2*same_team_col - 0.1*wall_col - 0.1*adv_team_col
-
         done = False
         reward = 0;
         if self.is_team_yellow:
@@ -482,7 +480,6 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         if(reward != 0):
             #pdb.set_trace()
-            reward = 500*reward
             done = True
             print("******************GOAL****************")
             print("Reward:"+str(reward))
@@ -501,46 +498,29 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 robot_to_ball_reward = self.prev_robot_ball_dist-robot_ball_dist
                 #print(".rob:("+"%.1f"%self.ball_x+ ", %.1f"%self.ball_y+") %.2f"%ball_to_goal_reward)
 
-                if (robot_ball_dist>15 or ball_to_goal_reward<0):#No donuts if the ball is far
+                if (robot_ball_dist>15):#No donuts if the ball is far
                     ball_to_goal_reward = 0
-                    
-                if (robot_to_ball_reward<0):
-                    robot_to_ball_reward = 0
 
-                reward = ((0.2*robot_to_ball_reward + ball_to_goal_reward) + penalty)
-                if (abs(reward)>2):
-                    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.2*robot_to_ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward + " cmd:%d"%self.cmd)
+                #if (robot_to_ball_reward<0):
+                #    robot_to_ball_reward = 0
+                same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
+                penalty = -0.3/(1+abs(0.1*self.linearSpeed)) - 0.3*wall_col - 0.2*same_team_col - 0.1*adv_team_col
 
+                reward = ((0.1*robot_to_ball_reward + ball_to_goal_reward) + penalty)
+
+                #normalize reward
+                reward = self.clip(reward/20,-0.5,0.5)   
+
+                #if (abs(reward)>2):
+                #print("r->b:%.2f"%(robot_to_ball_reward/10.0) + " b->g:%.2f"%(ball_to_goal_reward/10.0) + " pen:%.2f"%(penalty/10.0) + " rwd:%.2f"%reward + " cmd:%d"%self.cmd)
+
+                             
+                
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_potential = ball_potential
-        #print("lin:%.1f"%self.linearSpeed+"\tang:%.1f"%self.angularSpeed)
-        #print(t1_state)
-
-        #print("Reward:"+str(reward))
-        #time.sleep(0.100)#200ms
 
         env_state = ball_state + t1_state + t2_state
-        
-#        self.maxX = max(self.maxX, t1_state[0], t1_state[1])
-#        self.minX = min(self.minX, t1_state[0], t1_state[1])
-#
-#        self.maxT = max(self.maxT, t1_state[2])
-#        self.minT = min(self.minT, t1_state[2])
-#        
-#        self.maxVx = max(self.maxVx, t1_state[3], t1_state[4])
-#        self.minVx = min(self.minVx, t1_state[3], t1_state[4])
-#       
-#        self.maxVt = max(self.maxVt, t1_state[5])
-#        self.minVt = min(self.minVt, t1_state[5])  
-#        
-#        print ("X: (%.2f"%t1_state[0]+",%.2f"%t1_state[1]+") Vx: (%.2f"%t1_state[3]+",%.2f"%t1_state[4]+") T: (%.2f"%t1_state[2]+") Vt: (%.2f"%t1_state[5]+")")
-#        print ("X: (%.2f"%self.maxX+",%.2f"%self.minX+") Vx: (%.2f"%self.maxVx+",%.2f"%self.minVx+") T: (%.2f"%self.maxT+",%.2f"%self.minT+") Vt: (%.2f"%self.maxVt+",%.2f"%self.minVt+")")
-        #unused infos
-        #state.name_yellow
-        #state.name_blue
-        #print(state.time)
-
-        return np.array(env_state), reward/600.0, done
+        return np.array(env_state), reward, done
 
 
 

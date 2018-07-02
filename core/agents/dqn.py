@@ -28,8 +28,8 @@ class DQNAgent(Agent):
         # target_model
         self.target_model = self.model_prototype(self.model_params)
         self._update_target_model_hard()
-        self.gradMax = -1000
-        self.gradAvg = 0
+        #self.gradMax = -1000
+        #self.gradAvg = 0
 
         # memory
         # NOTE: we instantiate memory objects only inside fit_model/test_model
@@ -153,7 +153,6 @@ class DQNAgent(Agent):
         # choose action
         if np.random.uniform() < self.eps:  # then we choose a random action
             action = random.randrange(self.action_dim)
-            print('r', end='')
         else:                               # then we choose the greedy action
             if self.use_cuda:
                 action = np.argmax(q_values_ts.cpu().numpy())
@@ -165,7 +164,8 @@ class DQNAgent(Agent):
         # Select an action.
         state = self.memory.get_recent_state(observation)
         state_ts = torch.from_numpy(np.array(state)).unsqueeze(0).type(self.dtype)
-        q_values_ts = self.model(Variable(state_ts, volatile=True)).data # NOTE: only doing inference here, so volatile=True
+        with torch.no_grad():
+            q_values_ts = self.model(Variable(state_ts)).data # NOTE: only doing inference here, so volatile=True
         if self.training and self.step < self.learn_start:  # then we don't do any learning, just accumulate experiences into replay memory
             action = random.randrange(self.action_dim)      # thus we only randomly sample actions here, since the model hasn't been updated at all till now
         else:
@@ -177,13 +177,21 @@ class DQNAgent(Agent):
 
         return action
 
+    def shouldSample(self, reward):
+        prob = self.minSampleProb + abs(reward)*(1-self.minSampleProb)/self.rewardRangeScale
+        return prob >= np.random.uniform()
+        
     def _backward(self, reward, terminal):
         # Store most recent experience in memory.
-        if self.step % self.memory_interval == 0:
+        if self.step % self.memory_interval == 0 and self.shouldSample(reward):
+            # TODO: sample probability based on abs(reward) 
             # NOTE: so the tuples stored in memory corresponds to:
             # NOTE: in recent_observation(state0), take recent_action(action), get reward(reward), ends up in terminal(terminal1)
             self.memory.append(self.recent_observation, self.recent_action, reward, terminal,
                                training = self.training)
+            #i = 0
+            #print("bwd x:%.1f"%self.recent_observation[i+0]+" y:%.1f"%self.recent_observation[i+1]+" rwd:%.2f"%reward)        
+
 
         if not self.training:
             # We're done here. No need to update the replay memory since we only use the
@@ -201,6 +209,7 @@ class DQNAgent(Agent):
         # Train the network on a single stochastic batch.
         if self.step > self.learn_start and self.step % self.train_interval == 0:
             experiences = self.memory.sample(self.batch_size)
+            
             # Compute temporal difference error
             _, td_error_vb = self._get_q_update(experiences)
             # Construct optimizer and clear old gradients

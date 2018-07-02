@@ -30,8 +30,8 @@ import signal
 
 path_viewer = 'vss_sim/VSS-Viewer'
 path_simulator = 'vss_sim/VSS-Simulator'
-command_rate = 100 #ms
-cmd_wait = 0.000 #s
+command_rate = 330 #ms
+cmd_wait = 266 # 1/4 of 60 frames x (1s in ms)/fps  
 
 class KeyboardControl:
     def __init__(self):
@@ -42,16 +42,16 @@ class KeyboardControl:
         #self.last_state = np.array((0,0,0,0)+(0,0,0,0,0,0)+(0,0,0,0,0,0))
         self.cmd = 3
         
-        self.KRHO = 4
-        self.RHO_INC = 10 #increase rho a little bit, so it can catch up with the ball
-        self.KALPHA = 5
-        self.KBETA = -0.5
+        self.KRHO = 2
+        self.RHO_INC = 20 #increase rho, so it can catch up with the ball
+        self.KALPHA = 2.5
+        self.KBETA = -2
         self.HALF_AXIS = 8
         self.WHEEL_RADIUS = 2
         self.BALL_APPROACH = -20
         self.decAlpha = 0.3
-        self.decLin = 0.9
-        self.decAng = 0.6
+        self.decLin = 0.8
+        self.decAng = 0.2
         
         self.x = 0
         self.y = 0 
@@ -64,6 +64,7 @@ class KeyboardControl:
         self.prev_robot_ball_dist = None
         self.linearSpeed = 0
         self.angularSpeed = 0
+        self.send_time = 0
 #        self.maxX = -1000
 #        self.minX = 1000
 #        
@@ -85,6 +86,7 @@ class KeyboardControl:
         self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
+        self.socket_state.setsockopt(zmq.CONFLATE, 1)
         self.socket_state.connect ("tcp://localhost:%d" % port)
         #self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b"")#allow every topic
         try:
@@ -136,26 +138,31 @@ class KeyboardControl:
         #self.render(close=True)
 
     def receive_state(self):
-        try:
-            state = Global_State()
-            msg = self.socket_state.recv()
-            state.ParseFromString(msg)
-            count = 0
-            while(count < 100):
-                socks = dict(self.poller.poll(10))
-                if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
-                    #discard messages
-                    msg = self.socket_state.recv()
-                    state.ParseFromString(msg)
-                    count += 1
-                    #print("discard");
-                else:
-                    break
-            return state
-        except Exception as e:
-            print("caught timeout:"+str(e))
-             
-        return None
+        state = None
+        
+        while state == None:
+            try:
+                state = Global_State()
+                msg = self.socket_state.recv()
+                state.ParseFromString(msg)
+                count = 0
+                while(count < 100):
+                    socks = dict(self.poller.poll(10))
+                    if self.socket_state in socks and socks[self.socket_state] == zmq.POLLIN:
+                        #discard messages
+                        msg = self.socket_state.recv()
+                        state.ParseFromString(msg)
+                        count += 1
+                        #print("discard");
+                    else:
+                        break
+                return state
+            except Exception as e:
+                print("caught timeout:"+str(e))
+                self.reset()
+                state = None
+
+        return state
 
     def clip(self, val, vmin, vmax):
         return min(max(val, vmin), vmax)
@@ -164,6 +171,8 @@ class KeyboardControl:
         return int(base * round(float(x)/base))
     
     def send_commands(self, global_commands):
+        #print(".")
+        self.cmd = global_commands
         c = Global_Commands()
         c.id = 0
         c.is_team_yellow = self.is_team_yellow
@@ -178,10 +187,16 @@ class KeyboardControl:
 #        else: # Apply decrements
 #            self.target_x = self.target_x*self.decAlpha + self.x*(1-self.decAlpha)
 #            self.target_y = self.target_y*self.decAlpha + self.y*(1-self.decAlpha)
+
+#        if (self.cmd == 1):
+#            self.cmd = 2
+#        else:
+#            self.cmd = 1
+#            
+        #global_commands = 0#self.cmd
+        
         self.linearSpeed = self.linearSpeed*self.decLin
         self.angularSpeed = self.angularSpeed*self.decAng
- 
-        #global_commands = 0
 
         if global_commands == 0: #default command: carry ball to goal
             goal_x = 165
@@ -189,18 +204,17 @@ class KeyboardControl:
             goal_theta = math.atan2((self.ball_y-goal_y),(self.ball_x-goal_x))
             rho  = np.sqrt((self.ball_x-self.x)*(self.ball_x-self.x) + (self.ball_y-self.y)*(self.ball_y-self.y))
             apr = max(self.BALL_APPROACH,-rho/2)
-            print("apr:%.1f"%apr, "rho:%.1f"%rho)
             ball_appr_x = self.ball_x - apr*math.cos(goal_theta)
             ball_appr_y = self.ball_y - (apr/2)*math.sin(goal_theta)
             robot.left_vel, robot.right_vel = self.getWheelSpeeds(ball_appr_x, ball_appr_y, goal_theta, self.KRHO, self.RHO_INC)
             #self.target_x = None
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
-            self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
+            #self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
         else:
-            self.dict = {1:(4,0),
-                         2:(-4,0),
-                         3:(0,5),
-                         4:(0,-5),
+            self.dict = {1:(15,0),
+                         2:(-15,0),
+                         3:(0,15),
+                         4:(0,-15),
                          5:(0,0)
                         }
             #self.target_x = self.clip(self.target_x + self.dict[global_commands][0], -20, 190)
@@ -211,12 +225,11 @@ class KeyboardControl:
             self.angularSpeed = self.clip(self.angularSpeed + self.dict[global_commands][0],-60,60)
             robot.left_vel = self.linearSpeed - self.angularSpeed
             robot.right_vel  = self.linearSpeed + self.angularSpeed
-
-        print("lin1:%.1f"%self.linearSpeed+"\tang1:%.1f"%self.angularSpeed)
             
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " DX:%.1f"%(self.target_x)+ " Y:%.1f"%(self.y)+ " DY:%.1f"%(self.target_y)+" DT:%.1f"%math.degrees(target_theta))
 
+        print("lin:"+str(self.linearSpeed)+"\tang:"+str(self.angularSpeed))
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
         for i in range(2):
             robot = c.robot_commands.add()
@@ -285,12 +298,22 @@ class KeyboardControl:
             self.socket_debug2.send(buf)
 
     def step(self, global_commands):
+        #send the command:
         self.send_commands(global_commands)
-        time.sleep(cmd_wait)#wait for the command to became effective
-        rcvd_state = self.receive_state()
-        while rcvd_state == None:
-            self.reset()
+        #register current simulation timestamp:
+        sentTime = self.receive_state().time
+        #wait until the espected timestamp arrives
+        currentTime = sentTime
+        while currentTime<sentTime+cmd_wait:
             rcvd_state = self.receive_state()
+            currentTime = rcvd_state.time
+            if (currentTime<sentTime): # a simulator crash and restart?
+                break
+        
+        #print("t1:%d"%sentTime, "t2:%d"%currentTime, "dt:%d"%(currentTime-sentTime))
+        #print("t1:%d"%self.send_time, "t2:%d"%currentTime, "dt:%d"%(currentTime-self.send_time))
+        #print("dt_cmd:%d"%(currentTime-sentTime), "dt_step:%d"%(currentTime-self.send_time))
+        #self.send_time = currentTime
         
         #prev_state = self.last_state    
         self.last_state, reward, done = self.parse_state(rcvd_state)
@@ -335,7 +358,7 @@ class KeyboardControl:
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator,  '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 
@@ -442,13 +465,11 @@ class KeyboardControl:
                 self.x = t1_robot.pose.x
                 self.y = t1_robot.pose.y
                 self.theta = t1_robot.pose.yaw
-
                 self.linearSpeed = math.sqrt(t1_robot.v_pose.x*t1_robot.v_pose.x + t1_robot.v_pose.y*t1_robot.v_pose.y)
                 if (abs(math.atan2(t1_robot.v_pose.y,t1_robot.v_pose.x)-self.theta)>math.pi/2):
                     self.linearSpeed = - self.linearSpeed
                 
-                angularSpeed = t1_robot.v_pose.yaw*8/1.63 # VangWheel = vang*RobotWidth/WheelRadius
-                print("lin2:%.1f"%self.linearSpeed+"\tang2:%.1f"%self.angularSpeed)
+                self.angularSpeed = t1_robot.v_pose.yaw*8/1.63 # VangWheel = vang*RobotWidth/WheelRadius
 
             #estimated values
             #estimated_t1_state += (t1_robot.k_pose.x, t1_robot.k_pose.y, t1_robot.k_pose.yaw,t1_robot.k_v_pose.x, t1_robot.k_v_pose.y, t1_robot.k_v_pose.yaw)
@@ -463,7 +484,7 @@ class KeyboardControl:
             #estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw, t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
         same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
-        penalty = -0.2 - 1.2*same_team_col - 0.6*wall_col - 0.6*adv_team_col
+        #penalty = -0.2/(1+abs(0.1*self.linearSpeed)) - 0.2*same_team_col - 0.1*wall_col - 0.1*adv_team_col
 
         done = False
         reward = 0;
@@ -474,38 +495,38 @@ class KeyboardControl:
 
         if(reward != 0):
             #pdb.set_trace()
-            reward = 100*reward
-            #done = True
+            reward = 600*reward
+            done = True
             #print("******************GOAL****************")
             #print("Reward:"+str(reward))
-        elif(state.time >= 10):
-            #done = True
-            pass
-        else:
-            ball = np.array((self.ball_x,self.ball_y))
-            rb1 = np.array((self.x,self.y))
-            robot_ball_dist = np.linalg.norm(ball-rb1)
-            
-            #Compute reward:
-            ball_potential = ((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175+self.ball_x
-            #https://academo.org/demos/3d-surface-plotter/?expression=x%2B((x-80)%5E3-(x-80)*(y-65)%5E2)*0.000175&xRange=-0%2C165&yRange=0%2C130&resolution=58
-            if (self.prev_ball_potential == None):
-                reward = 0
-            else:
-                ball_to_goal_reward =  ball_potential - self.prev_ball_potential
-                robot_to_ball_reward = self.prev_robot_ball_dist-robot_ball_dist
-                #print(".rob:("+"%.1f"%self.ball_x+ ", %.1f"%self.ball_y+") %.2f"%ball_to_goal_reward)
-
-                if (robot_ball_dist>15):#No donuts if the ball is far
-                    ball_to_goal_reward = 0
-
-                reward = (0.1*robot_to_ball_reward + ball_to_goal_reward) + penalty
-                #if (abs(reward)>1):
-                #    print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.1*robot_to_ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward)
-
-            self.prev_robot_ball_dist = robot_ball_dist
-            self.prev_ball_potential = ball_potential
-        #print("lin:%.1f"%self.speed_lin+"\tang:%.1f"%self.speed_ang)
+#        else:
+#            ball = np.array((self.ball_x,self.ball_y))
+#            rb1 = np.array((self.x,self.y))
+#            robot_ball_dist = np.linalg.norm(ball-rb1)
+#            
+#            #Compute reward:
+#            ball_potential = ((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175+self.ball_x
+#            #https://academo.org/demos/3d-surface-plotter/?expression=x%2B((x-80)%5E3-(x-80)*(y-65)%5E2)*0.000175&xRange=-0%2C165&yRange=0%2C130&resolution=58
+#            if (self.prev_ball_potential == None):
+#                reward = 0
+#            else:
+#                ball_to_goal_reward =  ball_potential - self.prev_ball_potential
+#                robot_to_ball_reward = self.prev_robot_ball_dist-robot_ball_dist
+#                #print(".rob:("+"%.1f"%self.ball_x+ ", %.1f"%self.ball_y+") %.2f"%ball_to_goal_reward)
+#
+#                if (robot_ball_dist>15 or ball_to_goal_reward<0):#No donuts if the ball is far
+#                    ball_to_goal_reward = 0
+#                    
+#                if (robot_to_ball_reward<0):
+#                    robot_to_ball_reward = 0
+#
+#                reward = ((0.2*robot_to_ball_reward + ball_to_goal_reward) + penalty)
+#                #if (abs(reward)>2):
+#                print(".rob:("+"%.1f"%rb1[0]+ ", %.1f"%rb1[1]+") %.2f" %(0.2*robot_to_ball_reward) + ", %.2f" %ball_to_goal_reward + ", %.2f" %penalty + ", %.2f" %reward + " cmd:%d"%self.cmd)
+#
+#            self.prev_robot_ball_dist = robot_ball_dist
+#            self.prev_ball_potential = ball_potential
+        #print("lin:%.1f"%self.linearSpeed+"\tang:%.1f"%self.angularSpeed)
         #print(t1_state)
 
         #print("Reward:"+str(reward))
@@ -532,7 +553,7 @@ class KeyboardControl:
         #state.name_blue
         #print(state.time)
 
-        return np.array(env_state), reward, done
+        return np.array(env_state), reward/600.0, done
 
     def display(self,str_):
         text = self.font.render(str_, True, (255, 255, 255), (159, 182, 205))
@@ -545,6 +566,7 @@ class KeyboardControl:
     
     def loop(self):
         pygame.init()
+        clock = pygame.time.Clock()
         self.screen = pygame.display.set_mode( (640,480) )
         pygame.display.set_caption('Python numbers')
         self.screen.fill((159, 182, 205))
@@ -588,14 +610,30 @@ class KeyboardControl:
             self.display(str(key))
         
             self.send_commands(cmd)
-            time.sleep(cmd_wait)#wait for the command to became effective
-            for e in pygame.event.get(): 
-                pass # proceed other events. 
+            #register current simulation timestamp:
+            sentTime = self.receive_state().time
+            #wait until the espected timestamp arrives
+            currentTime = sentTime
+            while currentTime<sentTime+cmd_wait:
+                rcvd_state = self.receive_state()
+                currentTime = rcvd_state.time
+                if (currentTime<sentTime): # a simulator crash and restart?
+                    break
+
+            #for e in pygame.event.get(): 
+            #    pass # proceed other events. 
                 # always call event.get() or event.poll() in the main loop
+            
+            #print("t1:%d"%sentTime, "t2:%d"%currentTime, "dt:%d"%(currentTime-sentTime))
+            #print("t1:%d"%self.send_time, "t2:%d"%currentTime, "dt:%d"%(currentTime-self.send_time))
+            #print("dt_cmd:%d"%(currentTime-sentTime), "dt_step:%d"%(currentTime-self.send_time))
+            #self.send_time = currentTime
             
             #prev_state = last_state    
             last_state, reward, _ = self.parse_state(rcvd_state)
+            clock.tick(120)
 
 kcontrol = KeyboardControl()
 kcontrol.setup_connections(port=7777)
 kcontrol.loop()
+pygame.quit()

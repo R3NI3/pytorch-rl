@@ -32,7 +32,7 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans-GamaClip40lr00025hl2"    # "machine_id"
+        self.machine     = "Hans-Sampling"    # "machine_id"
         self.timestamp   = "180622"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
@@ -42,7 +42,7 @@ class Params(object):   # NOTE: shared across all modules
         self.seed        = 123
         self.render      = True        # whether render the window from the original envs or not
         self.visualize   = True         # whether do online plotting and stuff or not
-        self.save_best   = False        # save model w/ highest reward if True, otherwise always save the latest model
+        self.save_best   = True        # save model w/ highest reward if True, otherwise always save the latest model
 
         self.agent_type, self.env_type, self.game, self.model_type, self.memory_type = CONFIGS[self.config]
 
@@ -55,8 +55,8 @@ class Params(object):   # NOTE: shared across all modules
                 self.hist_len       = 1
                 self.hidden_dim     = 16
             else:
-                self.hist_len       = 2
-                self.hidden_dim     = 512
+                self.hist_len       = 1
+                self.hidden_dim     = 256
 
             self.use_cuda           = torch.cuda.is_available()
             self.dtype              = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
@@ -165,6 +165,8 @@ class MemoryParams(Params):     # settings for replay memory
         # NOTE: across all processes
         if self.agent_type == "dqn" and self.env_type == "gym":
             self.memory_size = 50000
+        elif self.agent_type == "dqn" and self.env_type == "vss":
+            self.memory_size = 25000
         else:
             self.memory_size = 1000000
 
@@ -191,27 +193,31 @@ class AgentParams(Params):  # hyperparameters for drl agents
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
-            self.gamma               = 0.95
-            self.clip_grad           = 40.#np.inf
+            self.gamma               = 0.99
+            self.clip_grad           = .15#np.inf
             self.lr                  = 0.00025
             self.lr_decay            = False
             self.weight_decay        = 0.
             self.eval_freq           = 1000     # NOTE: here means every this many steps
             self.eval_steps          = 500
             self.prog_freq           = self.eval_freq
-            self.test_nepisodes      = 1
+            self.test_nepisodes      = 10
 
-            self.learn_start         = 1000     # start update params after this many steps
+            self.learn_start         = 5000     # start update params after this many steps
             self.batch_size          = 32
             self.valid_size          = 250
             self.eps_start           = 1
             self.eps_end             = 0.2
             self.eps_eval            = 0.1
             self.eps_decay           = 100000
-            self.target_model_update = 500#0.0001
+            self.target_model_update = 5000#0.0001
             self.action_repetition   = 1
             self.memory_interval     = 1
-            self.train_interval      = 1
+            self.train_interval      = 10
+
+            self.minSampleProb       = 0.20
+            self.rewardRangeScale    = 0.5
+
         elif self.agent_type == "dqn" and self.env_type == "atari-ram" or \
              self.agent_type == "dqn" and self.env_type == "atari":
             self.steps               = 50000000 # max #iterations
