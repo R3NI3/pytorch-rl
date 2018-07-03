@@ -12,21 +12,14 @@ from core.envs.vss_interface.command_pb2 import *
 from core.envs.vss_interface.debug_pb2 import *
 from core.envs.vss_interface.state_pb2 import *
 
-import time
 import numpy as np
-import pdb
 import zmq
 import google.protobuf.text_format
-import gym
 import gym.spaces
-from gym import error, spaces
-from gym import utils
-from gym.utils import seeding
+from gym import spaces
 import math
 
 import subprocess
-import os
-import signal
 
 path_viewer = 'vss_sim/VSS-Viewer'
 path_simulator = 'vss_sim/VSS-Simulator'
@@ -50,8 +43,8 @@ class KeyboardControl:
         self.WHEEL_RADIUS = 2
         self.BALL_APPROACH = -20
         self.decAlpha = 0.3
-        self.decLin = 0.8
-        self.decAng = 0.2
+        self.decLin = 0.9
+        self.decAng = 0.9
         
         self.x = 0
         self.y = 0 
@@ -213,8 +206,8 @@ class KeyboardControl:
         else:
             self.dict = {1:(15,0),
                          2:(-15,0),
-                         3:(0,15),
-                         4:(0,-15),
+                         3:(0,30),
+                         4:(0,-30),
                          5:(0,0)
                         }
             #self.target_x = self.clip(self.target_x + self.dict[global_commands][0], -20, 190)
@@ -229,7 +222,7 @@ class KeyboardControl:
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " DX:%.1f"%(self.target_x)+ " Y:%.1f"%(self.y)+ " DY:%.1f"%(self.target_y)+" DT:%.1f"%math.degrees(target_theta))
 
-        print("lin:"+str(self.linearSpeed)+"\tang:"+str(self.angularSpeed))
+        #print("lin:"+str(self.linearSpeed)+"\tang:"+str(self.angularSpeed))
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
         for i in range(2):
             robot = c.robot_commands.add()
@@ -433,15 +426,12 @@ class KeyboardControl:
 
     def normX(self, x):
         return x/170.0
-    
+
     def normVx(self, vx):
-        return (vx+80.0)/(2*80.0)
-    
-    def normT(self, t):
-        return (t+math.pi)/(2*math.pi)
-        
+        return vx/80.0
+
     def normVt(self, vt):
-        return (vt+10)/(2*10)
+        return vt/12
 
     def parse_state(self, state):
         for idx, ball in enumerate(state.balls):
@@ -458,7 +448,8 @@ class KeyboardControl:
         #estimated_t1_state = ()
         for idx, t1_robot in enumerate(state.robots_yellow):
             #real values
-            t1_state += (self.normX(t1_robot.pose.x), self.normX(t1_robot.pose.y), self.normT(t1_robot.pose.yaw),
+            #encode yaw as sin(yaw) and cos(yaw)
+            t1_state += (self.normX(t1_robot.pose.x), self.normX(t1_robot.pose.y), math.sin(t1_robot.pose.yaw), math.cos(t1_robot.pose.yaw),
                          self.normVx(t1_robot.v_pose.x), self.normVx(t1_robot.v_pose.y), self.normVt(t1_robot.v_pose.yaw))
 
             if (idx==0):
@@ -478,9 +469,8 @@ class KeyboardControl:
         #estimated_t2_state = ()
         for idx, t2_robot in enumerate(state.robots_blue):
             #real values
-            t2_state += (self.normX(t2_robot.pose.x), self.normX(t2_robot.pose.y), self.normT(t2_robot.pose.yaw),
-                         self.normVx(t2_robot.v_pose.x), self.normVx(t2_robot.v_pose.y), self.normVt(t2_robot.v_pose.yaw))
-            #estimated values
+            t2_state += (self.normX(t2_robot.pose.x), self.normX(t2_robot.pose.y), math.sin(t2_robot.pose.yaw), math.cos(t2_robot.pose.yaw),
+                         self.normVx(t2_robot.v_pose.x), self.normVx(t2_robot.v_pose.y), self.normVt(t2_robot.v_pose.yaw))            #estimated values
             #estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw, t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
         same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
@@ -533,26 +523,9 @@ class KeyboardControl:
         #time.sleep(0.100)#200ms
 
         env_state = ball_state + t1_state + t2_state
-        
-#        self.maxX = max(self.maxX, t1_state[0], t1_state[1])
-#        self.minX = min(self.minX, t1_state[0], t1_state[1])
-#
-#        self.maxT = max(self.maxT, t1_state[2])
-#        self.minT = min(self.minT, t1_state[2])
-#        
-#        self.maxVx = max(self.maxVx, t1_state[3], t1_state[4])
-#        self.minVx = min(self.minVx, t1_state[3], t1_state[4])
-#       
-#        self.maxVt = max(self.maxVt, t1_state[5])
-#        self.minVt = min(self.minVt, t1_state[5])  
-#        
-#        print ("X: (%.2f"%t1_state[0]+",%.2f"%t1_state[1]+") Vx: (%.2f"%t1_state[3]+",%.2f"%t1_state[4]+") T: (%.2f"%t1_state[2]+") Vt: (%.2f"%t1_state[5]+")")
-#        print ("X: (%.2f"%self.maxX+",%.2f"%self.minX+") Vx: (%.2f"%self.maxVx+",%.2f"%self.minVx+") T: (%.2f"%self.maxT+",%.2f"%self.minT+") Vt: (%.2f"%self.maxVt+",%.2f"%self.minVt+")")
-        #unused infos
-        #state.name_yellow
-        #state.name_blue
-        #print(state.time)
 
+        print ("XY: (%.2f"%t1_state[0]+",%.2f"%t1_state[1]+") Theta: (%.2f"%t1_state[2]+",%.2f"%t1_state[3]+") Vxy: (%.2f"%t1_state[4]+", %.2f"%t1_state[5]+") Vtheta: %.2f"%t1_state[6])
+ 
         return np.array(env_state), reward/600.0, done
 
     def display(self,str_):

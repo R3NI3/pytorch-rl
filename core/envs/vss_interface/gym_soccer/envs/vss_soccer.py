@@ -188,7 +188,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.angularSpeed = self.angularSpeed*self.decAng
 
         if global_commands == 0: #default command: carry ball to goal
-            goal_x = 165
+            goal_x = 175
             goal_y = 65
             goal_theta = math.atan2((self.ball_y-goal_y),(self.ball_x-goal_x))
             rho  = np.sqrt((self.ball_x-self.x)*(self.ball_x-self.x) + (self.ball_y-self.y)*(self.ball_y-self.y))
@@ -423,13 +423,10 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         return x/170.0
 
     def normVx(self, vx):
-        return (vx+80.0)/(2*80.0)
-
-    def normT(self, t):
-        return (t+math.pi)/(2*math.pi)
+        return vx/80.0
 
     def normVt(self, vt):
-        return (vt+10)/(2*10)
+        return vt/12
 
     def parse_state(self, state):
         for idx, ball in enumerate(state.balls):
@@ -446,7 +443,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #estimated_t1_state = ()
         for idx, t1_robot in enumerate(state.robots_yellow):
             #real values
-            t1_state += (self.normX(t1_robot.pose.x), self.normX(t1_robot.pose.y), self.normT(t1_robot.pose.yaw),
+            #encode yaw as sin(yaw) and cos(yaw)
+            t1_state += (self.normX(t1_robot.pose.x), self.normX(t1_robot.pose.y), math.sin(t1_robot.pose.yaw), math.cos(t1_robot.pose.yaw),
                          self.normVx(t1_robot.v_pose.x), self.normVx(t1_robot.v_pose.y), self.normVt(t1_robot.v_pose.yaw))
 
             if (idx==0):
@@ -466,9 +464,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         #estimated_t2_state = ()
         for idx, t2_robot in enumerate(state.robots_blue):
             #real values
-            t2_state += (self.normX(t2_robot.pose.x), self.normX(t2_robot.pose.y), self.normT(t2_robot.pose.yaw),
-                         self.normVx(t2_robot.v_pose.x), self.normVx(t2_robot.v_pose.y), self.normVt(t2_robot.v_pose.yaw))
-            #estimated values
+            t2_state += (self.normX(t2_robot.pose.x), self.normX(t2_robot.pose.y), math.sin(t2_robot.pose.yaw), math.cos(t2_robot.pose.yaw),
+                         self.normVx(t2_robot.v_pose.x), self.normVx(t2_robot.v_pose.y), self.normVt(t2_robot.v_pose.yaw))            #estimated values
             #estimated_t2_state += (t2_robot.k_pose.x, t2_robot.k_pose.y, t2_robot.k_pose.yaw, t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
         done = False
@@ -479,11 +476,12 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             reward = state.goals_blue - state.goals_yellow
 
         if(reward != 0):
-            #pdb.set_trace()
+            reward = 1000*reward
             done = True
             print("******************GOAL****************")
             print("Reward:"+str(reward))
         else:
+            reward = -1
             ball = np.array((self.ball_x,self.ball_y))
             rb1 = np.array((self.x,self.y))
             robot_ball_dist = np.linalg.norm(ball-rb1)
@@ -491,35 +489,39 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #Compute reward:
             ball_potential = ((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175+self.ball_x
             #https://academo.org/demos/3d-surface-plotter/?expression=x%2B((x-80)%5E3-(x-80)*(y-65)%5E2)*0.000175&xRange=-0%2C165&yRange=0%2C130&resolution=58
-            if (self.prev_ball_potential == None):
-                reward = 0
-            else:
-                ball_to_goal_reward =  ball_potential - self.prev_ball_potential
-                robot_to_ball_reward = self.prev_robot_ball_dist-robot_ball_dist
-                #print(".rob:("+"%.1f"%self.ball_x+ ", %.1f"%self.ball_y+") %.2f"%ball_to_goal_reward)
+            if (self.prev_ball_potential != None):
+                #compute penatly:
+                same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
+                #time penalty = -0.5, colision penalty = -0.5                
+                penalty = -0.5 - 0.5*max(wall_col,same_team_col,adv_team_col)
 
+                #compute penalty action minimization
+                robot_to_ball_reward = self.clip((self.prev_robot_ball_dist-robot_ball_dist)/10,0,1)
+                ball_to_goal_reward =  self.clip((ball_potential - self.prev_ball_potential)/10,0,1)
+                
                 if (robot_ball_dist>15):#No donuts if the ball is far
                     ball_to_goal_reward = 0
 
                 #if (robot_to_ball_reward<0):
                 #    robot_to_ball_reward = 0
-                same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
-                penalty = -0.3/(1+abs(0.1*self.linearSpeed)) - 0.3*wall_col - 0.2*same_team_col - 0.1*adv_team_col
 
-                reward = ((0.1*robot_to_ball_reward + ball_to_goal_reward) + penalty)
+                reward = penalty + (0.3*robot_to_ball_reward + 0.7*ball_to_goal_reward)
 
-                #normalize reward
-                reward = self.clip(reward/20,-0.5,0.5)   
-
-                #if (abs(reward)>2):
-                #print("r->b:%.2f"%(robot_to_ball_reward/10.0) + " b->g:%.2f"%(ball_to_goal_reward/10.0) + " pen:%.2f"%(penalty/10.0) + " rwd:%.2f"%reward + " cmd:%d"%self.cmd)
-
-                             
+                if (reward>-0.3):
+                    print("cmd:%d"%self.cmd + " r->b:%.2f"%robot_to_ball_reward + " b->g:%.2f"%ball_to_goal_reward + " pen:%.2f"%penalty + " rwd:%.2f"%reward)
+                
+                #clip reward
+                reward = self.clip(reward,-1,0)   
                 
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_potential = ball_potential
 
+        #pack state:
         env_state = ball_state + t1_state + t2_state
+
+        #normalize reward: 
+        reward = reward/1000
+        
         return np.array(env_state), reward, done
 
 
