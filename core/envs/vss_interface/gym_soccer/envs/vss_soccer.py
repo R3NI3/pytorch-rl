@@ -182,10 +182,10 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             self.target_theta = self.theta
 
         self.target_rho = math.sqrt((self.target_x - self.x)*(self.target_x - self.x) + (self.target_y - self.y)*(self.target_y - self.y))
-        
+
         if abs(self.target_rho) > 0.01:
             self.target_theta = math.atan2((self.target_y - self.y),(self.target_x - self.x))
-            
+
         if abs(self.smallestAngleDiff(self.target_theta, self.theta))>math.pi/2:
             self.target_rho   = -self.target_rho
             self.target_theta =  self.to180range(self.target_theta+math.pi)
@@ -196,8 +196,9 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             goal_theta = math.atan2((self.ball_y-goal_y),(self.ball_x-goal_x))
             rho  = np.sqrt((self.ball_x-self.x)*(self.ball_x-self.x) + (self.ball_y-self.y)*(self.ball_y-self.y))
             apr = max(self.BALL_APPROACH,-rho/2)
-            ball_appr_x = self.ball_x - apr*math.cos(goal_theta)
-            ball_appr_y = self.ball_y - (apr/2)*math.sin(goal_theta)
+            self.target_x = ball_appr_x = self.ball_x - apr*math.cos(goal_theta)
+            self.target_y = ball_appr_y = self.ball_y - (apr/2)*math.sin(goal_theta)
+            self.target_theta = goal_theta
             robot.left_vel, robot.right_vel = self.getWheelSpeeds(ball_appr_x, ball_appr_y, goal_theta, self.KRHO, self.RHO_INC)
             #self.target_x = None
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
@@ -214,29 +215,28 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #target_theta = math.atan2((self.target_y-self.y),(self.target_x-self.x))
             self.target_rho = self.clip(self.target_rho + self.dict[global_commands][1],-60,60)        
             self.target_theta = self.to180range(self.target_theta+self.dict[global_commands][0])
-            
+
             if self.target_rho<0:
                 rbt_theta = self.to180range(self.theta+math.pi)
                 cmd_theta = self.to180range(self.target_theta+math.pi)
-                print("target_rho:%.1f"%self.target_rho +" rbt_t:%.1f"%math.degrees(rbt_theta)+" cmd_t:%.1f"%math.degrees(cmd_theta))
+                #print("target_rho:%.1f"%self.target_rho +" rbt_t:%.1f"%math.degrees(rbt_theta)+" cmd_t:%.1f"%math.degrees(cmd_theta))
             else:
                 rbt_theta = self.theta
                 cmd_theta = self.target_theta
-            
+
             self.angularSpeed = self.clip(-30*self.smallestAngleDiff(cmd_theta,rbt_theta),-30, 30)
             self.linearSpeed = 1.5*self.target_rho
-            
+
             if global_commands!=5:
                 self.target_x = self.clip(self.x + self.target_rho*math.cos(self.target_theta),0,170)
                 self.target_y = self.clip(self.y + self.target_rho*math.sin(self.target_theta),0,130)
-            
-            #self.send_debug([self.target_x,self.target_y, self.target_theta])
-            
+
             robot.left_vel = self.linearSpeed - self.angularSpeed
             robot.right_vel  = self.linearSpeed + self.angularSpeed
-            
-            print("target_theta:%.1f"%math.degrees(self.target_theta) + " theta:%.1f"%math.degrees(self.theta) + " ang:%.1f"%self.angularSpeed + " target_rho:%.1f"%self.target_rho + " lin:%.1f"%self.linearSpeed)
+
+            #print("target_theta:%.1f"%math.degrees(self.target_theta) + " theta:%.1f"%math.degrees(self.theta) + " ang:%.1f"%self.angularSpeed + " target_rho:%.1f"%self.target_rho + " lin:%.1f"%self.linearSpeed)
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
+        #self.send_debug([self.target_x,self.target_y, self.target_theta])
             
 
         #print("lin:"+str(self.linearSpeed)+"\tang:"+str(self.angularSpeed))
@@ -483,10 +483,15 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         for idx, t1_robot in enumerate(state.robots_yellow):
             #real values
             #encode yaw as sin(yaw) and cos(yaw)
-            t1_state += (self.normX(t1_robot.pose.x), self.normX(t1_robot.pose.y), math.sin(t1_robot.pose.yaw), math.cos(t1_robot.pose.yaw),
-                         self.normVx(t1_robot.v_pose.x), self.normVx(t1_robot.v_pose.y), self.normVt(t1_robot.v_pose.yaw))
 
             if (idx==0):
+                if self.target_x == None:
+                    self.target_x = t1_robot.pose.x
+                    self.target_y = t1_robot.pose.y
+                    
+                t1_state += (self.normX(self.target_x), self.normX(self.target_y), self.normX(t1_robot.pose.x), self.normX(t1_robot.pose.y), math.sin(t1_robot.pose.yaw), math.cos(t1_robot.pose.yaw),
+                         self.normVx(t1_robot.v_pose.x), self.normVx(t1_robot.v_pose.y), self.normVt(t1_robot.v_pose.yaw))
+
                 self.x = t1_robot.pose.x
                 self.y = t1_robot.pose.y
                 self.theta = t1_robot.pose.yaw
@@ -495,6 +500,9 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                     self.linearSpeed = - self.linearSpeed
                 
                 self.angularSpeed = t1_robot.v_pose.yaw*8/1.63 # VangWheel = vang*RobotWidth/WheelRadius
+            else:
+                t1_state += (self.normX(t1_robot.pose.x), self.normX(t1_robot.pose.y), math.sin(t1_robot.pose.yaw), math.cos(t1_robot.pose.yaw),
+                         self.normVx(t1_robot.v_pose.x), self.normVx(t1_robot.v_pose.y), self.normVt(t1_robot.v_pose.yaw))
 
             #estimated values
             #estimated_t1_state += (t1_robot.k_pose.x, t1_robot.k_pose.y, t1_robot.k_pose.yaw,t1_robot.k_v_pose.x, t1_robot.k_v_pose.y, t1_robot.k_v_pose.yaw)
@@ -535,8 +543,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 penalty = -0.5 - 0.5*max(wall_col,same_team_col,adv_team_col)
 
                 #compute penalty action minimization
-                robot_to_ball_reward = self.clip((self.prev_robot_ball_dist-robot_ball_dist)/10,-1,1)
-                ball_to_goal_reward =  self.clip((ball_potential - self.prev_ball_potential)/10,0,1)
+                robot_to_ball_reward = self.clip((self.prev_robot_ball_dist-robot_ball_dist)/10,-0.1,1)
+                ball_to_goal_reward =  self.clip((ball_potential - self.prev_ball_potential)/10,-0.1,1)
                 
                 if (robot_ball_dist>15):#No donuts if the ball is far
                     ball_to_goal_reward = 0
