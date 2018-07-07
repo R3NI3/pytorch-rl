@@ -32,8 +32,8 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans-Reward"    # "machine_id"
-        self.timestamp   = "180622"   # "yymmdd##"
+        self.machine     = "Hans-Reward-vanila"    # "machine_id"
+        self.timestamp   = "180622-norandAdam"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
         self.load_pretrained = False    # load pretrained model if true
@@ -47,8 +47,8 @@ class Params(object):   # NOTE: shared across all modules
         self.agent_type, self.env_type, self.game, self.model_type, self.memory_type = CONFIGS[self.config]
 
         if self.agent_type == "dqn":
-            self.enable_double_dqn  = True
-            self.enable_dueling     = True
+            self.enable_double_dqn  = False
+            self.enable_dueling     = False
             self.dueling_type       = 'avg' # avg | max | naive
 
             if self.env_type == "gym":
@@ -166,7 +166,7 @@ class MemoryParams(Params):     # settings for replay memory
         if self.agent_type == "dqn" and self.env_type == "gym":
             self.memory_size = 50000
         elif self.agent_type == "dqn" and self.env_type == "vss":
-            self.memory_size = 25000
+            self.memory_size = 50000
         else:
             self.memory_size = 1000000
 
@@ -178,7 +178,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
         if self.agent_type == "dqn":
             self.value_criteria = F.smooth_l1_loss
             self.optim          = optim.Adam
-            # self.optim          = optim.RMSprop
+            #self.optim          = optim.RMSprop
         elif self.agent_type == "a3c":
             self.value_criteria = nn.MSELoss()
             self.optim          = SharedAdam    # share momentum across learners
@@ -194,26 +194,26 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
             self.gamma               = 0.99
-            self.clip_grad           = .15#np.inf
-            self.lr                  = 0.00025
+            self.clip_grad           = np.inf
+            self.lr                  = 0.001
             self.lr_decay            = False
             self.weight_decay        = 0.
-            self.eval_freq           = 1000     # NOTE: here means every this many steps
-            self.eval_steps          = 500
+            self.eval_freq           = 250     # NOTE: here means every this many steps
+            self.eval_steps          = 250
             self.prog_freq           = self.eval_freq
             self.test_nepisodes      = 10
 
-            self.learn_start         = 5000     # start update params after this many steps
+            self.learn_start         = 1000     # start update params after this many steps
             self.batch_size          = 32
             self.valid_size          = 250
-            self.eps_start           = 1
-            self.eps_end             = 0.2
-            self.eps_eval            = 0.1
-            self.eps_decay           = 100000
-            self.target_model_update = 5000#0.0001
+            self.eps_start           = 0.2
+            self.eps_end             = 0.05
+            self.eps_eval            = 0.0
+            self.eps_decay           = 500000
+            self.target_model_update = 1000#0.0001
             self.action_repetition   = 1
             self.memory_interval     = 1
-            self.train_interval      = 10
+            self.train_interval      = 1
 
             self.minSampleProb       = 1
             self.rewardRangeScale    = 0.5

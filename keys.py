@@ -44,13 +44,15 @@ class KeyboardControl:
         self.BALL_APPROACH = -20
         self.decAlpha = 0.3
         self.decLin = 0.9
-        self.decAng = 0.9
+        self.decAng = 0
         
         self.x = 0
         self.y = 0 
         self.theta = 0
         self.target_x = None
         self.target_y = None
+        self.target_theta = None
+        self.target_rho = 0
         self.ball_x = None
         self.ball_y = None
         self.prev_ball_potential = None
@@ -76,7 +78,7 @@ class KeyboardControl:
         self.is_team_yellow = is_team_yellow
         self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-d', '-r', str(command_rate), '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
         self.socket_state.setsockopt(zmq.CONFLATE, 1)
@@ -173,23 +175,24 @@ class KeyboardControl:
         c.name = "Teste"
         robot = c.robot_commands.add()
         robot.id = 0
-
-#        if (self.target_x == None): #Reset target to robot position if None
-#            self.target_x = self.x
-#            self.target_y = self.y
-#        else: # Apply decrements
-#            self.target_x = self.target_x*self.decAlpha + self.x*(1-self.decAlpha)
-#            self.target_y = self.target_y*self.decAlpha + self.y*(1-self.decAlpha)
-
-#        if (self.cmd == 1):
-#            self.cmd = 2
-#        else:
-#            self.cmd = 1
-#            
-        #global_commands = 0#self.cmd
         
-        self.linearSpeed = self.linearSpeed*self.decLin
-        self.angularSpeed = self.angularSpeed*self.decAng
+        if self.target_theta == None:
+            self.target_theta = self.theta
+
+        if self.target_x == None:
+            self.target_x = self.x
+            self.target_y = self.y
+            self.target_rho = 0
+            self.target_theta = self.theta
+
+        self.target_rho = math.sqrt((self.target_x - self.x)*(self.target_x - self.x) + (self.target_y - self.y)*(self.target_y - self.y))
+        
+        if abs(self.target_rho) > 0.01:
+            self.target_theta = math.atan2((self.target_y - self.y),(self.target_x - self.x))
+            
+        if abs(self.smallestAngleDiff(self.target_theta, self.theta))>math.pi/2:
+            self.target_rho   = -self.target_rho
+            self.target_theta =  self.to180range(self.target_theta+math.pi)
 
         if global_commands == 0: #default command: carry ball to goal
             goal_x = 165
@@ -204,23 +207,41 @@ class KeyboardControl:
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
             #self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
         else:
-            self.dict = {1:(15,0),
-                         2:(-15,0),
-                         3:(0,30),
-                         4:(0,-30),
+            self.dict = {1:(-math.pi/12,0),
+                         2:( math.pi/12,0),
+                         3:(0, 12),
+                         4:(0,-12),
                          5:(0,0)
                         }
             #self.target_x = self.clip(self.target_x + self.dict[global_commands][0], -20, 190)
             #self.target_y = self.clip(self.target_y + self.dict[global_commands][1], -20, 150)
             #target_theta = math.atan2((self.target_y-self.y),(self.target_x-self.x))
-            #self.send_debug([self.target_x,self.target_y,target_theta])
-            self.linearSpeed = self.clip(self.linearSpeed + self.dict[global_commands][1],-80,80)
-            self.angularSpeed = self.clip(self.angularSpeed + self.dict[global_commands][0],-60,60)
+            self.target_rho = self.clip(self.target_rho + self.dict[global_commands][1],-60,60)        
+            self.target_theta = self.to180range(self.target_theta+self.dict[global_commands][0])
+            
+            if self.target_rho<0:
+                rbt_theta = self.to180range(self.theta+math.pi)
+                cmd_theta = self.to180range(self.target_theta+math.pi)
+                print("target_rho:%.1f"%self.target_rho +" rbt_t:%.1f"%math.degrees(rbt_theta)+" cmd_t:%.1f"%math.degrees(cmd_theta))
+            else:
+                rbt_theta = self.theta
+                cmd_theta = self.target_theta
+            
+            self.angularSpeed = self.clip(-30*self.smallestAngleDiff(cmd_theta,rbt_theta),-30, 30)
+            self.linearSpeed = 1.5*self.target_rho
+            
+            if global_commands!=5:
+                self.target_x = self.clip(self.x + self.target_rho*math.cos(self.target_theta),0,170)
+                self.target_y = self.clip(self.y + self.target_rho*math.sin(self.target_theta),0,130)
+            
+            #self.send_debug([self.target_x,self.target_y, self.target_theta])
+            
             robot.left_vel = self.linearSpeed - self.angularSpeed
             robot.right_vel  = self.linearSpeed + self.angularSpeed
             
+            print("target_theta:%.1f"%math.degrees(self.target_theta) + " theta:%.1f"%math.degrees(self.theta) + " ang:%.1f"%self.angularSpeed + " target_rho:%.1f"%self.target_rho + " lin:%.1f"%self.linearSpeed)
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
-            #print(str(global_commands)+":X:%.1f"%(self.x)+ " DX:%.1f"%(self.target_x)+ " Y:%.1f"%(self.y)+ " DY:%.1f"%(self.target_y)+" DT:%.1f"%math.degrees(target_theta))
+            
 
         #print("lin:"+str(self.linearSpeed)+"\tang:"+str(self.angularSpeed))
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
@@ -235,7 +256,20 @@ class KeyboardControl:
             self.socket_com1.send(buf)
         else:
             self.socket_com2.send(buf)
-            
+
+    def toPositiveAngle(self, angle):
+        return math.fmod(angle + 2*math.pi, 2 * math.pi)
+    
+    def smallestAngleDiff(self, target, source):
+        a = self.toPositiveAngle(target) - self.toPositiveAngle(source)
+    
+        if (a > math.pi):
+            a = a - 2 * math.pi
+        elif (a < -math.pi):
+            a = a + 2 * math.pi
+        
+        return a
+    
     def to180range(self,angle):
         angle = math.fmod(angle, 2 * math.pi)
         if (angle < -math.pi):
@@ -332,13 +366,18 @@ class KeyboardControl:
 
         print("prev:", "%.1f" %last_x, "%.1f" %last_y, "%.1f" %last_yaw, left_vel, right_vel)
         print("new: ", "%.1f" %new_x, "%.1f" %new_y, "%.1f" %new_yaw)
-        
-    def reset(self):
-        print('RESET')
+    
+    def initVars(self):
         self.prev_robot_ball_dist = None
         self.prev_ball_potential = None
         self.target_x = None
         self.target_y = None
+        self.target_theta = None
+        
+    def reset(self):
+        print('RESET')
+        self.initVars()
+        
         # Send SIGKILL (on Linux)
         self.p.terminate()
         returncode = self.p.wait()
@@ -351,7 +390,7 @@ class KeyboardControl:
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-d', '-r', str(command_rate), '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 
@@ -434,6 +473,7 @@ class KeyboardControl:
         return vt/12
 
     def parse_state(self, state):
+                
         for idx, ball in enumerate(state.balls):
             #real values
             ball_state = (self.normX(ball.pose.x), self.normX(ball.pose.y),
@@ -487,7 +527,9 @@ class KeyboardControl:
             #pdb.set_trace()
             reward = 600*reward
             done = True
-            #print("******************GOAL****************")
+            self.initVars()
+
+            print("******************GOAL****************")
             #print("Reward:"+str(reward))
 #        else:
 #            ball = np.array((self.ball_x,self.ball_y))
@@ -524,7 +566,7 @@ class KeyboardControl:
 
         env_state = ball_state + t1_state + t2_state
 
-        print ("XY: (%.2f"%t1_state[0]+",%.2f"%t1_state[1]+") Theta: (%.2f"%t1_state[2]+",%.2f"%t1_state[3]+") Vxy: (%.2f"%t1_state[4]+", %.2f"%t1_state[5]+") Vtheta: %.2f"%t1_state[6])
+        #print ("XY: (%.2f"%t1_state[0]+",%.2f"%t1_state[1]+") Theta: (%.2f"%t1_state[2]+",%.2f"%t1_state[3]+") Vxy: (%.2f"%t1_state[4]+", %.2f"%t1_state[5]+") Vtheta: %.2f"%t1_state[6])
  
         return np.array(env_state), reward/600.0, done
 
@@ -545,43 +587,38 @@ class KeyboardControl:
         self.screen.fill((159, 182, 205))
     
         self.font = pygame.font.Font(None, 17)
+        pygame.key.set_repeat(1, 10)
         
         done = False
+        cmd = 5
+        
         while not done:
             rcvd_state = self.receive_state()
             while rcvd_state == None:
                 rcvd_state = self.receive_state()
     
-            pygame.event.pump()
-            keys = pygame.key.get_pressed()
-            key = ""
-            cmd = 5
-            if keys[K_q]:
-                done = True
-                print("quit")
-            elif keys[K_a]:
-                key = "a"
-                cmd = 0
-                print(key, cmd)
-            elif keys[K_LEFT]:
-                key = "<"
-                cmd = 1
-                print(key, cmd)
-            elif keys[K_RIGHT]:
-                key = ">"
-                cmd = 2
-                print(key, cmd)
-            elif keys[K_UP]:
-                key = "A"
-                cmd = 3
-                print(key, cmd)
-            elif keys[K_DOWN]:
-                key = "v"
-                cmd = 4
-                print(key, cmd)
-            
-            self.display(str(key))
-        
+            for event in pygame.event.get():
+                # test events, set key states
+                if event.type == pygame.KEYUP:
+                    cmd = 5
+                elif event.type == pygame.KEYDOWN:
+                    if event.key==K_q:
+                        done = True
+                    elif event.key==K_a:
+                        cmd = 0 #go
+                    elif event.key==K_LEFT:
+                        cmd = 1
+                    elif event.key==K_RIGHT:
+                        cmd = 2
+                    elif event.key==K_UP:
+                        cmd = 3
+                    elif event.key==K_DOWN:
+                        cmd = 4
+                        
+            print("cmd:%d"%cmd)
+
+            self.display(str(cmd))
+
             self.send_commands(cmd)
             #register current simulation timestamp:
             sentTime = self.receive_state().time

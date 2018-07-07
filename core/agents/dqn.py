@@ -170,6 +170,7 @@ class DQNAgent(Agent):
             action = random.randrange(self.action_dim)      # thus we only randomly sample actions here, since the model hasn't been updated at all till now
         else:
             action = self._epsilon_greedy(q_values_ts)
+            #print("act:%d"%action + " q:"+str(q_values_ts))
 
         # Book keeping
         self.recent_observation = observation
@@ -184,7 +185,6 @@ class DQNAgent(Agent):
     def _backward(self, reward, terminal):
         # Store most recent experience in memory.
         if self.step % self.memory_interval == 0 and self.shouldSample(reward):
-            # TODO: sample probability based on abs(reward) 
             # NOTE: so the tuples stored in memory corresponds to:
             # NOTE: in recent_observation(state0), take recent_action(action), get reward(reward), ends up in terminal(terminal1)
             self.memory.append(self.recent_observation, self.recent_action, reward, terminal,
