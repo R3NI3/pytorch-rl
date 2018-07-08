@@ -234,14 +234,13 @@ class KeyboardControl:
                 self.target_x = self.clip(self.x + self.target_rho*math.cos(self.target_theta),0,170)
                 self.target_y = self.clip(self.y + self.target_rho*math.sin(self.target_theta),0,130)
             
-            #self.send_debug([self.target_x,self.target_y, self.target_theta])
-            
             robot.left_vel = self.linearSpeed - self.angularSpeed
             robot.right_vel  = self.linearSpeed + self.angularSpeed
             
-            print("target_theta:%.1f"%math.degrees(self.target_theta) + " theta:%.1f"%math.degrees(self.theta) + " ang:%.1f"%self.angularSpeed + " target_rho:%.1f"%self.target_rho + " lin:%.1f"%self.linearSpeed)
+            #print("target_theta:%.1f"%math.degrees(self.target_theta) + " theta:%.1f"%math.degrees(self.theta) + " ang:%.1f"%self.angularSpeed + " target_rho:%.1f"%self.target_rho + " lin:%.1f"%self.linearSpeed)
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
-            
+        
+        self.send_debug([self.target_x,self.target_y, self.target_theta])
 
         #print("lin:"+str(self.linearSpeed)+"\tang:"+str(self.angularSpeed))
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
