@@ -18,6 +18,8 @@ import signal
 import pdb, os
 path_simulator = 'vss_sim/VSS-Simulator'
 path_viewer = 'vss_sim/VSS-Viewer'
+cmd_rate = '250'
+cmd_delay = .050
 
 class ConSoccerEnv(gym.Env, utils.EzPickle):
     def __init__(self):
@@ -33,6 +35,7 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
         self.socket_com2 = None
         self.socket_debug1 = None
         self.socket_debug2 = None
+        self.time = time.time()
         print(os.getpid())
 
     def setup_connections(self, ip='127.0.0.1', port=5555, is_team_yellow = True):
@@ -41,10 +44,11 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
         self.is_team_yellow = is_team_yellow
         self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-r', '300', '-d', '-a', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', cmd_rate, '-d', '-a', '-p', str(self.port)])
 
         # state socket
         self.socket_state_ = self.context.socket(zmq.SUB) #socket to listen vision/simulator
+        self.socket_state_.setsockopt(zmq.CONFLATE, 1)
         self.socket_state_.connect ("tcp://localhost:%d" % self.port)
         #self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b"")#allow every topic
         try:
@@ -53,6 +57,7 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
             self.socket_state_.setsockopt_string(zmq.SUBSCRIBE, b'')
         self.socket_state_.setsockopt(zmq.LINGER, 0)
         self.socket_state_.setsockopt(zmq.RCVTIMEO, 500)
+        
 
         self.last_state, reward, done = self.parse_state(self.receive_state(self.socket_state_))
         self.init_state = self.last_state
@@ -73,9 +78,10 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
         # start simulation
         self.context.destroy
         self.context = zmq.Context()
-        self.p = subprocess.Popen([path_simulator, '-r', '300', '-d', '-a', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', cmd_rate, '-d', '-a', '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
+        self.socket_state.setsockopt(zmq.CONFLATE, 1)
         self.socket_state.connect ("tcp://localhost:%d" % self.port)
         #self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b"")#allow every topic
         try:
@@ -84,6 +90,7 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
             self.socket_state.setsockopt_string(zmq.SUBSCRIBE, b'')
         self.socket_state.setsockopt(zmq.LINGER, 0)
         self.socket_state.setsockopt(zmq.RCVTIMEO, 50000)
+        #self.socket_state.setsockopt(zmq.CONFLATE, 1)
 
         # commands socket
         self.socket_com1 = self.context.socket(zmq.PAIR) #socket to Team 1
@@ -131,17 +138,17 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
         try:
             state = Global_State()
             msg = socket_state.recv()
-            state.ParseFromString(msg)
             count = 0
-            while(count < 100):
+            while(count < 10):
                 socks = dict(self.poller.poll(10))
                 if socket_state in socks and socks[socket_state] == zmq.POLLIN:
                     #discard messages
                     msg = socket_state.recv()
-                    state.ParseFromString(msg)
                     count += 1
+                    #print(count)
                 else:
                     break
+            state.ParseFromString(msg)
             return state
         except Exception as e:
             print("caught timeout:"+str(e))
@@ -150,6 +157,9 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
 
     def send_commands(self, global_commands):
         c = Global_Commands()
+        #act_time = time.time()
+        #print('total',self.time - act_time)
+        #self.time = act_time
         c.id = 0
         c.is_team_yellow = self.is_team_yellow
         c.situation = 0
@@ -157,8 +167,12 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
 
         robot = c.robot_commands.add()
         robot.id = 0
-        robot.left_vel = global_commands[0][0]
-        robot.right_vel = global_commands[0][1]
+        lin_vel = np.clip(global_commands[0][0]*20, -20, 20)
+        ang_vel = np.clip(global_commands[0][1]*20, -20, 20)
+        robot.left_vel  = (lin_vel - ang_vel)
+        robot.right_vel = (lin_vel + ang_vel)
+        #robot.left_vel = 10
+        #robot.right_vel = -10
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
         for i in range(2):
             robot = c.robot_commands.add()
@@ -181,12 +195,12 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
 
     def step(self, global_commands):
         self.send_commands(global_commands)
-        time.sleep(.150)
+        time.sleep(cmd_delay)
         rcvd_state = self.receive_state(self.socket_state)
         while rcvd_state == None:
             self.reset()
             rcvd_state = self.receive_state(self.socket_state)
-            
+        #print('cmd-rcv',self.time - time.time())
         self.last_state, reward, done = self.parse_state(rcvd_state)
         return self.last_state, reward, done, {}
 
@@ -208,14 +222,46 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator, '-r', '300', '-d', '-a', '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-r', cmd_rate, '-a', '-d', '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state(self.socket_state))
-        print("RESET")
         return self.last_state
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
+
+    def state_normalize(self, ball, t1, t2):
+        max_vel_x_y = 20
+        max_v_yaw = 4.2 #max 21
+        max_x = 170
+        max_y = 130
+        max_yaw = 2*np.pi
+        norm_ball = ()
+        norm_t1 = ()
+        norm_t2 = ()
+
+        #ball x,y,vx,vy = tamanho 4
+        i = int(len(ball)/4)
+        l = 4
+        for idx in range(i):
+            norm_ball += ((ball[l*idx + 0])/(max_x), (ball[l*idx + 1])/(max_y),
+                          (ball[l*idx + 2]-(-max_vel_x_y))/(2*max_vel_x_y), (ball[l*idx + 3]-(-max_vel_x_y))/(2*max_vel_x_y))
+
+        #t1 x,y,yaw,vx,vy,v_yaw = tamaho 6
+        i = int(len(t1)/6)
+        l = 6
+        for idx in range(i):
+            norm_t1 += ((t1[l*idx + 0])/(max_x), (t1[l*idx + 1])/(max_y), (t1[l*idx + 2]-(-max_yaw/2))/max_yaw,
+                        (t1[l*idx + 3]-(-max_vel_x_y))/(2*max_vel_x_y), (t1[l*idx + 4]-(-max_vel_x_y))/(2*max_vel_x_y), (t1[l*idx + 5]-(-max_v_yaw))/(2*max_v_yaw))
+        
+        #t2 x,y,yaw,vx,vy,v_yaw = tamanho 6
+        i = int(len(t2)/6)
+        l = 6
+        for idx in range(i):
+            norm_t2 += ((t2[l*idx + 0])/(max_x), (t2[l*idx + 1])/(max_y), (t2[l*idx + 2]-(-max_yaw/2))/max_yaw,
+                        (t2[l*idx + 3]-(-max_vel_x_y))/(2*max_vel_x_y), (t2[l*idx + 4]-(-max_vel_x_y))/(2*max_vel_x_y), (t2[l*idx + 5]-(-max_v_yaw))/(2*max_v_yaw))
+
+        return norm_ball, norm_t1, norm_t2
 
 
     def render(self, mode='human', close=False):
@@ -228,6 +274,59 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
         #    if (not self.is_rendering):
         #        self.v = subprocess.Popen([path_viewer, '-p', str(self.port)])
         #        self.is_rendering = True
+
+    def check_collision(self, t_yellow, t_blue):
+        robot_id = 0
+        COL_DIST=12
+        if(self.is_team_yellow):
+            robot_x = t_yellow[0].pose.x
+            robot_z = t_yellow[0].pose.y
+        else:
+            robot_x = t_blue[0].pose.x
+            robot_z = t_blue[0].pose.y
+
+        same_team_col = False
+        adv_team_col = False
+        wall_col = False
+        
+        #for every robot in robots team
+        for idx, t1_robot in enumerate(t_yellow):
+            tmp_robot_x = t1_robot.pose.x
+            tmp_robot_z = t1_robot.pose.y
+            if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
+                if(self.is_team_yellow):
+                    if (idx !=robot_id):
+                        same_team_col = True
+                else:
+                    adv_team_col = True
+
+        #for every robot in adversary team
+        for idx, t2_robot in enumerate(t_blue):
+            tmp_robot_x = t2_robot.pose.x
+            tmp_robot_z = t2_robot.pose.y
+            if (np.linalg.norm([tmp_robot_x-robot_x,tmp_robot_z-robot_z]) < COL_DIST):
+                if(not self.is_team_yellow):
+                    if (idx !=robot_id):
+                        same_team_col = True
+                else:
+                    adv_team_col = True
+
+        #def wall collision when:
+        #walls z +- 0 ou z +- 130
+        #walls 45 < z < 85 e x +- 0,x+-170 
+        if (robot_z < 6 or robot_z > 124):
+            wall_col = True
+        else:
+            if (robot_z < 51 or robot_z > 79): #outside goal height +- 6
+                if (robot_x < 16 or robot_x > 154): #near goal line walls
+                    wall_col = True
+            else: #inside goal height
+                if (robot_x < 6 or robot_x > 164):
+                    wall_col = True
+
+        #TODO: test corners
+
+        return same_team_col, adv_team_col, wall_col
 
     def parse_state(self, state):
         for idx, ball in enumerate(state.balls):
@@ -261,7 +360,8 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
                                    t2_robot.k_v_pose.x, t2_robot.k_v_pose.y, t2_robot.k_v_pose.yaw)
 
         done = False
-
+        same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
+        penalty = -0.1*same_team_col - 0.05*wall_col - 0.05*adv_team_col
         reward = 0;
         if self.is_team_yellow:
             reward = state.goals_yellow - state.goals_blue
@@ -271,9 +371,9 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
         if(reward != 0):
             #pdb.set_trace()
             print("******************GOAL****************")
-            reward = 5*reward*(11 - state.time)
+            reward = 30*reward
             done = True
-        elif(state.time >= 10):
+        elif(state.time >= 20):
             done = True
         else:
             ball = np.array((ball_state[0],ball_state[1]))
@@ -284,20 +384,24 @@ class ConSoccerEnv(gym.Env, utils.EzPickle):
             if (self.prev_robot_ball_dist == None):
                 reward = -1
             else:
-                ball_reward = self.prev_robot_ball_dist-robot_ball_dist
-                goal_reward = self.prev_ball_goal_dist-ball_goal_dist
-                reward = ball_reward + 4*goal_reward - 0.2
-                #print("%.2f" %ball_reward, "%.2f" %goal_reward, "%.2f" %reward)
+                if (self.prev_robot_ball_dist-robot_ball_dist > 0.1):
+                    reward = 0.1 + self.prev_robot_ball_dist-robot_ball_dist
+                elif (self.prev_robot_ball_dist-robot_ball_dist < -0.1):
+                    reward = -0.2 + self.prev_robot_ball_dist-robot_ball_dist
+                else:
+                    reward = -0.5
+                reward += self.prev_ball_goal_dist - ball_goal_dist
+                reward += penalty
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_goal_dist = ball_goal_dist
         #print("Reward:"+str(reward))
         #time.sleep(0.100)#200ms
-
+        ball_state, t1_state, t2_state = self.state_normalize(ball_state, t1_state, t2_state)
         env_state = ball_state + t1_state + t2_state
         #unused infos
         #state.name_yellow
         #state.name_blue
         #print(state.time)
 
-        return np.array(env_state), reward, done
+        return np.array(env_state), reward/300, done
 
