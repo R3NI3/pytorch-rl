@@ -28,8 +28,8 @@ class DQNAgent(Agent):
         # target_model
         self.target_model = self.model_prototype(self.model_params)
         self._update_target_model_hard()
-        #self.gradMax = -1000
-        #self.gradAvg = 0
+        self.gradMax = -1000
+        self.gradAvg = 0
 
         # memory
         # NOTE: we instantiate memory objects only inside fit_model/test_model
@@ -182,6 +182,14 @@ class DQNAgent(Agent):
         prob = self.minSampleProb + abs(reward)*(1-self.minSampleProb)/self.rewardRangeScale
         return prob >= np.random.uniform()
         
+    def inspectGrads(self, grad):
+         maxg = grad.max()
+         maxg = max(-grad.min(), maxg)
+         if (maxg>self.gradMax):
+             print("**** NEW MAX GRAD: %.5f"%maxg +" OLD: %.5f"%self.gradMax +" AVG: %.5f"%self.gradAvg +" ****")
+             self.gradMax = maxg
+         self.gradAvg = .1*maxg + .9*self.gradAvg
+        
     def _backward(self, reward, terminal):
         # Store most recent experience in memory.
         if self.step % self.memory_interval == 0 and self.shouldSample(reward):
@@ -191,7 +199,6 @@ class DQNAgent(Agent):
                                training = self.training)
             #i = 0
             #print("bwd x:%.1f"%self.recent_observation[i+0]+" y:%.1f"%self.recent_observation[i+1]+" rwd:%.2f"%reward)        
-
 
         if not self.training:
             # We're done here. No need to update the replay memory since we only use the
@@ -219,6 +226,7 @@ class DQNAgent(Agent):
             # run backward pass and clip gradient
             td_error_vb.backward()
             for param in self.model.parameters():
+                self.inspectGrads(param.grad)
                 param.grad.data.clamp_(-self.clip_grad, self.clip_grad)
             # Perform the update
             self.optimizer.step()
@@ -336,6 +344,9 @@ class DQNAgent(Agent):
                 self.training = True
                 self.logger.warning("Resume Training @ Step: " + str(self.step))
                 should_start_new = True
+        
+        print("**** Current GRAD: %.5f"%self.gradMax +" AVG: %.5f"%self.gradAvg +" ****")
+
 
     def _eval_model(self):
         self.training = False

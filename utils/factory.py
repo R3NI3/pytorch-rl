@@ -16,6 +16,7 @@ EnvDict = {"gym":       GymEnv,                 # classic control games from ope
 
 from core.models.empty import EmptyModel
 from core.models.dqn_mlp import DQNMlpModel
+from core.models.vssdqn_mlp import VSSDQNMlpModel
 from core.models.dqn_cnn import DQNCnnModel
 from core.models.a3c_mlp_con import A3CMlpConModel
 from core.models.a3c_cnn_dis import A3CCnnDisModel
@@ -23,6 +24,7 @@ from core.models.acer_mlp_dis import ACERMlpDisModel
 from core.models.acer_cnn_dis import ACERCnnDisModel
 ModelDict = {"empty":        EmptyModel,        # contains nothing, only should be used w/ EmptyAgent
              "dqn-mlp":      DQNMlpModel,       # for dqn low-level    input
+             "vssdqn-mlp":   VSSDQNMlpModel,    # for deeper dqn low-level input             
              "dqn-cnn":      DQNCnnModel,       # for dqn pixel-level  input
              "a3c-mlp-con":  A3CMlpConModel,    # for a3c low-level    input (NOTE: continuous must end in "-con")
              "a3c-cnn-dis":  A3CCnnDisModel,    # for a3c pixel-level  input

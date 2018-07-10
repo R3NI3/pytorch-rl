@@ -24,7 +24,7 @@ CONFIGS = [
 [ "a3c",      "gym",       "InvertedPendulum-v1",      "a3c-mlp-con",  "none"      ],  # 6
 [ "acer",     "gym",       "CartPole-v0",              "acer-mlp-dis", "episodic"  ],  # 7  # NOTE: acer under testing
 [ "acer",     "atari",     "Boxing-v0",                "acer-cnn-dis", "episodic"  ],  # 8  # NOTE: acer under testing
-[ "dqn",      "vss",       "vss_soccer-v0",            "dqn-mlp",  "sequential"      ]   # 9
+[ "dqn",      "vss",       "vss_soccer-v0",            "vssdqn-mlp",  "sequential"      ]   # 9
 ]
 
 class Params(object):   # NOTE: shared across all modules
@@ -32,7 +32,7 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans-Polar"    # "machine_id"
+        self.machine     = "Hans-Polar6LayersDD"    # "machine_id"
         self.timestamp   = "180707"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
@@ -47,7 +47,7 @@ class Params(object):   # NOTE: shared across all modules
         self.agent_type, self.env_type, self.game, self.model_type, self.memory_type = CONFIGS[self.config]
 
         if self.agent_type == "dqn":
-            self.enable_double_dqn  = False
+            self.enable_double_dqn  = True
             self.enable_dueling     = False
             self.dueling_type       = 'avg' # avg | max | naive
 
@@ -193,9 +193,9 @@ class AgentParams(Params):  # hyperparameters for drl agents
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
-            self.gamma               = 0.99
+            self.gamma               = 0.75
             self.clip_grad           = np.inf
-            self.lr                  = 0.001
+            self.lr                  = 0.00001
             self.lr_decay            = False
             self.weight_decay        = 0.
             self.eval_freq           = 250     # NOTE: here means every this many steps
@@ -206,9 +206,9 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.learn_start         = 1000     # start update params after this many steps
             self.batch_size          = 32
             self.valid_size          = 250
-            self.eps_start           = 0.2
-            self.eps_end             = 0.05
-            self.eps_eval            = 0.0
+            self.eps_start           = 0.3
+            self.eps_end             = 0.1
+            self.eps_eval            = 0.1
             self.eps_decay           = 500000
             self.target_model_update = 1000#0.0001
             self.action_repetition   = 1
@@ -222,7 +222,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
              self.agent_type == "dqn" and self.env_type == "atari":
             self.steps               = 50000000 # max #iterations
             self.early_stop          = None     # max #steps per episode
-            self.gamma               = 0.99
+            self.gamma               = 0.5
             self.clip_grad           = 40.#np.inf
             self.lr                  = 0.00025
             self.lr_decay            = False
