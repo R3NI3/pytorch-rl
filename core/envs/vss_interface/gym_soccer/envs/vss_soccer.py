@@ -33,8 +33,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.steps = 0
         self.rewardSum = 0
         
-        self.KRHO = 1.5
-        self.RHO_INC = 10 #increase rho a little bit, so it can catch up with the ball
+        self.KRHO = 1.75
+        self.RHO_INC = 20 #increase rho a little bit, so it can catch up with the ball
         self.KALPHA = 4
         self.KBETA = -0.4
         self.HALF_AXIS = 8
@@ -55,10 +55,12 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.ball_y = None
         self.prev_ball = None
         self.prev_ball_potential = None
+        self.avg_ball_potential = 0
         self.prev_robot_ball_dist = None
         self.linearSpeed = 0
         self.angularSpeed = 0
         self.send_time = 0
+        self.steps = 0
 #        self.maxX = -1000
 #        self.minX = 1000
 #        
@@ -207,8 +209,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
             #self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
         else:
-            self.dict = {1:(-math.pi/12,0),
-                         2:( math.pi/12,0),
+            self.dict = {1:(-math.pi/36,0),
+                         2:( math.pi/36,0),
                          3:(0, 12),
                          4:(0,-12),
                          5:(0,0)
@@ -373,8 +375,9 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.target_x = None
         self.target_y = None
         self.target_theta = None
-        self.steps = 0
         self.rewardSum = 0.0
+        self.steps = 0
+        self.avg_ball_potential = 0
         
     def reset(self):
         print("RESET\nAcum_reward:%.5f"%(self.rewardSum))
@@ -530,11 +533,22 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             reward = state.goals_blue - state.goals_yellow
 
         MAX_STEPS = 250.0
-        if(reward != 0):
+        
+        if self.steps >= round(MAX_STEPS):
+            done = True
+            MAX_POTENTIAL = 273.0-80.0
+            self.avg_ball_potential = (self.avg_ball_potential/MAX_STEPS)-80.0# 80: potential on half field
+            reward = MAX_STEPS*self.avg_ball_potential/(MAX_POTENTIAL*3)
+            print("######### Max steps reached #########\navg_potential:%.1f"%self.avg_ball_potential)
+            print("Reward:"+str(reward))
+            self.steps = 0
+            self.avg_ball_potential = 0
+
+        elif(reward != 0):
             reward = MAX_STEPS*reward
             done = True
             print("******************GOAL****************")
-            print("Reward:"+str(reward))
+            print("Reward:"+str(reward))     
         else:
             reward = -1.
 
@@ -543,7 +557,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             robot_ball_dist = np.linalg.norm(ball-rb1) #distance to current ball position
             
             #Compute reward:
-            ball_potential = ((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175+self.ball_x
+            ball_potential = self.ball_x+((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175
             #https://academo.org/demos/3d-surface-plotter/?expression=x%2B((x-80)%5E3-(x-80)*(y-65)%5E2)*0.000175&xRange=-0%2C165&yRange=0%2C130&resolution=58
             if (self.prev_ball_potential != None):
                 
@@ -575,6 +589,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_potential = ball_potential
+            self.avg_ball_potential = self.avg_ball_potential+ball_potential
             self.prev_ball = ball # keep where the ball was before
 
         #pack state:

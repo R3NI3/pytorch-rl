@@ -193,8 +193,8 @@ class AgentParams(Params):  # hyperparameters for drl agents
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
-            self.gamma               = 0.75
-            self.clip_grad           = np.inf
+            self.gamma               = 0.95
+            self.clip_grad           = 0.01#np.inf
             self.lr                  = 0.00001
             self.lr_decay            = False
             self.weight_decay        = 0.
@@ -213,7 +213,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.target_model_update = 1000#0.0001
             self.action_repetition   = 1
             self.memory_interval     = 1
-            self.train_interval      = 1
+            self.train_interval      = 2
 
             self.minSampleProb       = 1
             self.rewardRangeScale    = 0.5

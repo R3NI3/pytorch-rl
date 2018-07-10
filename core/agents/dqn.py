@@ -30,6 +30,7 @@ class DQNAgent(Agent):
         self._update_target_model_hard()
         self.gradMax = -1000
         self.gradAvg = 0
+        self.grad = 0
 
         # memory
         # NOTE: we instantiate memory objects only inside fit_model/test_model
@@ -189,6 +190,7 @@ class DQNAgent(Agent):
              print("**** NEW MAX GRAD: %.5f"%maxg +" OLD: %.5f"%self.gradMax +" AVG: %.5f"%self.gradAvg +" ****")
              self.gradMax = maxg
          self.gradAvg = .1*maxg + .9*self.gradAvg
+         self.grad = maxg
         
     def _backward(self, reward, terminal):
         # Store most recent experience in memory.
@@ -267,6 +269,7 @@ class DQNAgent(Agent):
         should_start_new = True
         while self.step < self.steps:
             if should_start_new:    # start of a new episode
+                print("**** Last GRAD: %.5f"%self.grad + " Max GRAD: %.5f"%self.gradMax+" AVG: %.5f"%self.gradAvg +" ****")
                 print("\n****** New Train Episode ******\nStep:%d"%self.step+" eps:%.2f"%self.eps)
                 episode_steps = 0
                 episode_reward = 0.
@@ -344,8 +347,6 @@ class DQNAgent(Agent):
                 self.training = True
                 self.logger.warning("Resume Training @ Step: " + str(self.step))
                 should_start_new = True
-        
-        print("**** Current GRAD: %.5f"%self.gradMax +" AVG: %.5f"%self.gradAvg +" ****")
 
 
     def _eval_model(self):
