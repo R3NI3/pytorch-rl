@@ -166,7 +166,7 @@ class MemoryParams(Params):     # settings for replay memory
         if self.agent_type == "dqn" and self.env_type == "gym":
             self.memory_size = 50000
         elif self.agent_type == "dqn" and self.env_type == "vss":
-            self.memory_size = 1000000
+            self.memory_size = 1000000#50000
         else:
             self.memory_size = 1000000
 
@@ -194,8 +194,8 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
             self.gamma               = 0.95
-            self.clip_grad           = 0.01#np.inf
-            self.lr                  = 0.00001
+            self.clip_grad           = 0.05#0.01
+            self.lr                  = 0.0001#0.00001
             self.lr_decay            = False
             self.weight_decay        = 0.
             self.eval_freq           = 250     # NOTE: here means every this many steps
@@ -206,10 +206,10 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.learn_start         = 1000     # start update params after this many steps
             self.batch_size          = 32
             self.valid_size          = 250
-            self.eps_start           = 0.5
-            self.eps_end             = 0.05
+            self.eps_start           = 0.7
+            self.eps_end             = 0.1
             self.eps_eval            = 0.05
-            self.eps_decay           = 1000000
+            self.eps_decay           = 1500000
             self.target_model_update = 1000#0.0001
             self.action_repetition   = 1
             self.memory_interval     = 1

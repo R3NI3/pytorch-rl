@@ -57,6 +57,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.prev_ball_potential = None
         self.avg_ball_potential = 0
         self.prev_robot_ball_dist = None
+        self.avg_robot_ball_dist = 0
         self.linearSpeed = 0
         self.angularSpeed = 0
         self.send_time = 0
@@ -79,7 +80,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.is_team_yellow = is_team_yellow
         self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-d', '-r', str(command_rate), '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
         self.socket_state.setsockopt(zmq.CONFLATE, 1)
@@ -111,7 +112,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         shape = len(self.last_state)
         #todo fix obs and action spaces
         self.observation_space = spaces.Box(low=-200, high=200, dtype=np.float32, shape=(shape,))
-        self.action_space = spaces.Box(low=-100, high=100, dtype=np.float32, shape=(6,)) #wheels velocities
+        self.action_space = spaces.Box(low=-100, high=100, dtype=np.float32, shape=(5,)) #wheels velocities
 
         # Initialize poll set
         self.poller.register(self.socket_state, zmq.POLLIN)
@@ -195,7 +196,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             self.target_rho   = -self.target_rho
             self.target_theta =  self.to180range(self.target_theta+math.pi)
 
-        if global_commands == 0: #default command: carry ball to goal
+        if global_commands == 6: #default command: carry ball to goal
             goal_x = 185
             goal_y = 65
             goal_theta = math.atan2((self.ball_y-goal_y),(self.ball_x-goal_x))
@@ -209,11 +210,11 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #print(str(global_commands)+":X:%.1f"%(self.x)+ " Y:%.1f"%(self.y))
             #self.send_debug([ball_appr_x, ball_appr_y, goal_theta])
         else:
-            self.dict = {1:(-math.pi/36,0),
-                         2:( math.pi/36,0),
-                         3:(0, 12),
-                         4:(0,-12),
-                         5:(0,0)
+            self.dict = {0:(-math.pi/36,0),
+                         1:( math.pi/36,0),
+                         2:(0, 12),
+                         3:(0,-12),
+                         4:(0,0)
                         }
             #self.target_x = self.clip(self.target_x + self.dict[global_commands][0], -20, 190)
             #self.target_y = self.clip(self.target_y + self.dict[global_commands][1], -20, 150)
@@ -232,7 +233,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             self.angularSpeed = self.clip(-30*self.smallestAngleDiff(cmd_theta,rbt_theta),-30, 30)
             self.linearSpeed = 1.5*self.target_rho
 
-            if global_commands!=5:
+            if global_commands!=4:
                 self.target_x = self.clip(self.x + self.target_rho*math.cos(self.target_theta),0,170)
                 self.target_y = self.clip(self.y + self.target_rho*math.sin(self.target_theta),0,130)
 
@@ -242,7 +243,6 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #print("target_theta:%.1f"%math.degrees(self.target_theta) + " theta:%.1f"%math.degrees(self.theta) + " ang:%.1f"%self.angularSpeed + " target_rho:%.1f"%self.target_rho + " lin:%.1f"%self.linearSpeed)
             #robot.left_vel, robot.right_vel = self.getWheelSpeeds(self.target_x, self.target_y, target_theta, 4)
         #self.send_debug([self.target_x,self.target_y, self.target_theta])
-            
 
         #print("lin:"+str(self.linearSpeed)+"\tang:"+str(self.angularSpeed))
         #print("command:"+str(global_commands)+" vel:["+str(robot.left_vel)+","+str(robot.right_vel)+"]");
@@ -378,6 +378,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.rewardSum = 0.0
         self.steps = 0
         self.avg_ball_potential = 0
+        self.avg_robot_ball_dist = 0
         
     def reset(self):
         print("RESET\nAcum_reward:%.5f"%(self.rewardSum))
@@ -395,7 +396,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator, '-d', '-r', str(command_rate), '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 
@@ -533,13 +534,17 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             reward = state.goals_blue - state.goals_yellow
 
         MAX_STEPS = 250.0
-        
+        MAX_POTENTIAL = 188.0
+        MAX_DISTANCE = 214.0
+
         if self.steps >= round(MAX_STEPS):
             done = True
-            MAX_POTENTIAL = 273.0-80.0
-            self.avg_ball_potential = (self.avg_ball_potential/MAX_STEPS)-80.0# 80: potential on half field
-            reward = MAX_STEPS*self.avg_ball_potential/(MAX_POTENTIAL*3)
-            print("######### Max steps reached #########\navg_potential:%.1f"%self.avg_ball_potential)
+            self.avg_ball_potential = (self.avg_ball_potential/MAX_STEPS)
+            self.avg_robot_ball_dist = (self.avg_robot_ball_dist/MAX_STEPS)
+            
+            reward = MAX_STEPS*(self.avg_ball_potential/(MAX_POTENTIAL) - self.avg_robot_ball_dist/(2*MAX_DISTANCE))
+
+            print("######### Max steps reached #########\navg_potential:%.1f"%self.avg_ball_potential+"\navg_distance:%.1f"%self.avg_robot_ball_dist)
             print("Reward:"+str(reward))
             self.steps = 0
             self.avg_ball_potential = 0
@@ -548,56 +553,27 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             reward = MAX_STEPS*reward
             done = True
             print("******************GOAL****************")
-            print("Reward:"+str(reward))     
+            print("Reward:"+str(reward))
         else:
             reward = -1.
 
             ball = np.array((self.ball_x,self.ball_y)) # where the ball is now
             rb1 = np.array((self.x,self.y)) #where the robot is now
             robot_ball_dist = np.linalg.norm(ball-rb1) #distance to current ball position
-            
-            #Compute reward:
-            ball_potential = self.ball_x+((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175
-            #https://academo.org/demos/3d-surface-plotter/?expression=x%2B((x-80)%5E3-(x-80)*(y-65)%5E2)*0.000175&xRange=-0%2C165&yRange=0%2C130&resolution=58
-            if (self.prev_ball_potential != None):
+            ball_potential = self.ball_x+((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175 - 85.0
                 
-                
-                robot_ball_dist = np.linalg.norm(self.prev_ball-rb1) # distance to previous ball position
-                #compute penatly:
-                same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
-                #time penalty = -0.5, colision penalty = -0.5                
-                penalty = -1.0# - 0.25*max(wall_col,same_team_col,adv_team_col)
-
-                #compute penalty action minimization
-                robot_to_ball_reward = self.clip((self.prev_robot_ball_dist-robot_ball_dist)/10.0,-0.5, 1.0)
-                ball_to_goal_reward =  self.clip((ball_potential - self.prev_ball_potential)/10.0,-0.5, 1.0)
-                
-                if (robot_ball_dist>15):#No donuts if the ball is far
-                    ball_to_goal_reward = 0.0
-
-                #if (robot_to_ball_reward<0):
-                #    robot_to_ball_reward = 0
-
-                #reward = penalty + (0.3*robot_to_ball_reward + 0.7*ball_to_goal_reward)
-                reward = penalty + ball_to_goal_reward
-
-                if (reward>-0.95 or reward < -1):
-                    print("cmd:%d"%self.cmd + " r->b:%.2f"%robot_to_ball_reward + " b->g:%.2f"%ball_to_goal_reward + " pen:%.2f"%penalty + " rwd:%.2f"%reward)
-                
-                #clip reward
-                reward = self.clip(reward,-3.0,0.0)
-                
-            self.prev_robot_ball_dist = robot_ball_dist
-            self.prev_ball_potential = ball_potential
+            #self.prev_robot_ball_dist = robot_ball_dist
+            #self.prev_ball_potential = ball_potential
             self.avg_ball_potential = self.avg_ball_potential+ball_potential
-            self.prev_ball = ball # keep where the ball was before
+            self.avg_robot_ball_dist = self.avg_robot_ball_dist + robot_ball_dist
+            #self.prev_ball = ball # keep where the ball was before
 
         #pack state:
         env_state = ball_state + t1_state + t2_state
 
         #normalize reward: 
         reward = reward/MAX_STEPS
-        
+
         self.rewardSum = self.rewardSum + reward
         self.steps = self.steps + 1
         
