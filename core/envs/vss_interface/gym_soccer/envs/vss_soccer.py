@@ -545,7 +545,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             self.avg_ball_potential = 0
 
         elif(reward != 0):
-            reward = MAX_STEPS*reward
+            reward = 2*MAX_STEPS*reward
             done = True
             print("******************GOAL****************")
             print("Reward:"+str(reward))     
