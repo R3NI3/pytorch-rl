@@ -57,6 +57,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.prev_ball_potential = None
         self.avg_ball_potential = 0
         self.prev_robot_ball_dist = None
+        self.avg_robot_ball_dist = 0
+        self.prev_robot_ball_dist = None
         self.linearSpeed = 0
         self.angularSpeed = 0
         self.send_time = 0
@@ -79,7 +81,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.is_team_yellow = is_team_yellow
         self.context = zmq.Context()
         # start simulation
-        self.p = subprocess.Popen([path_simulator, '-d', '-r', str(command_rate), '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         # state socket
         self.socket_state = self.context.socket(zmq.SUB) #socket to listen vision/simulator
         self.socket_state.setsockopt(zmq.CONFLATE, 1)
@@ -378,6 +380,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.rewardSum = 0.0
         self.steps = 0
         self.avg_ball_potential = 0
+        self.avg_robot_ball_dist = 0
         
     def reset(self):
         print("RESET\nAcum_reward:%.5f"%(self.rewardSum))
@@ -395,7 +398,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             else:
                 break
 
-        self.p = subprocess.Popen([path_simulator, '-d', '-r', str(command_rate), '-p', str(self.port)])
+        self.p = subprocess.Popen([path_simulator, '-a', '-d', '-r', str(command_rate), '-p', str(self.port)])
         self.last_state, reward, done = self.parse_state(self.receive_state())
         return self.last_state
 
@@ -533,13 +536,17 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             reward = state.goals_blue - state.goals_yellow
 
         MAX_STEPS = 250.0
+        MAX_POTENTIAL = 188.0
+        MAX_DISTANCE = 214.0
         
         if self.steps >= round(MAX_STEPS):
             done = True
-            MAX_POTENTIAL = 273.0-80.0
-            self.avg_ball_potential = (self.avg_ball_potential/MAX_STEPS)-80.0# 80: potential on half field
-            reward = MAX_STEPS*self.avg_ball_potential/(MAX_POTENTIAL*3)
-            print("######### Max steps reached #########\navg_potential:%.1f"%self.avg_ball_potential)
+            self.avg_ball_potential = (self.avg_ball_potential/MAX_STEPS)
+            self.avg_robot_ball_dist = (self.avg_robot_ball_dist/MAX_STEPS)
+
+            reward = MAX_STEPS*(self.avg_ball_potential/(MAX_POTENTIAL) - self.avg_robot_ball_dist/(2*MAX_DISTANCE))
+
+            print("######### Max steps reached #########\navg_potential:%.1f"%self.avg_ball_potential+"\navg_distance:%.1f"%self.avg_robot_ball_dist)
             print("Reward:"+str(reward))
             self.steps = 0
             self.avg_ball_potential = 0
@@ -555,41 +562,41 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             ball = np.array((self.ball_x,self.ball_y)) # where the ball is now
             rb1 = np.array((self.x,self.y)) #where the robot is now
             robot_ball_dist = np.linalg.norm(ball-rb1) #distance to current ball position
-            
+
             #Compute reward:
             ball_potential = self.ball_x+((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175
             #https://academo.org/demos/3d-surface-plotter/?expression=x%2B((x-80)%5E3-(x-80)*(y-65)%5E2)*0.000175&xRange=-0%2C165&yRange=0%2C130&resolution=58
             if (self.prev_ball_potential != None):
-                
-                
+
                 robot_ball_dist = np.linalg.norm(self.prev_ball-rb1) # distance to previous ball position
                 #compute penatly:
                 same_team_col, adv_team_col, wall_col = self.check_collision(state.robots_yellow, state.robots_blue)
                 #time penalty = -0.5, colision penalty = -0.5                
-                penalty = -1.0# - 0.25*max(wall_col,same_team_col,adv_team_col)
+                penalty = -0.75 - 0.25*max(wall_col,same_team_col,adv_team_col)
 
                 #compute penalty action minimization
                 robot_to_ball_reward = self.clip((self.prev_robot_ball_dist-robot_ball_dist)/10.0,-0.5, 1.0)
                 ball_to_goal_reward =  self.clip((ball_potential - self.prev_ball_potential)/10.0,-0.5, 1.0)
-                
+
                 if (robot_ball_dist>15):#No donuts if the ball is far
                     ball_to_goal_reward = 0.0
 
                 #if (robot_to_ball_reward<0):
                 #    robot_to_ball_reward = 0
 
-                #reward = penalty + (0.3*robot_to_ball_reward + 0.7*ball_to_goal_reward)
-                reward = penalty + ball_to_goal_reward
+                reward = penalty + (0.3*robot_to_ball_reward + 0.7*ball_to_goal_reward)
+                #reward = penalty + ball_to_goal_reward
 
                 if (reward>-0.95 or reward < -1):
                     print("cmd:%d"%self.cmd + " r->b:%.2f"%robot_to_ball_reward + " b->g:%.2f"%ball_to_goal_reward + " pen:%.2f"%penalty + " rwd:%.2f"%reward)
-                
+
                 #clip reward
                 reward = self.clip(reward,-3.0,0.0)
-                
+
             self.prev_robot_ball_dist = robot_ball_dist
             self.prev_ball_potential = ball_potential
             self.avg_ball_potential = self.avg_ball_potential+ball_potential
+            self.avg_robot_ball_dist = self.avg_robot_ball_dist + robot_ball_dist
             self.prev_ball = ball # keep where the ball was before
 
         #pack state:
@@ -597,7 +604,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
         #normalize reward: 
         reward = reward/MAX_STEPS
-        
+
         self.rewardSum = self.rewardSum + reward
         self.steps = self.steps + 1
         
