@@ -564,7 +564,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             robot_ball_dist = np.linalg.norm(ball-rb1) #distance to current ball position
 
             #Compute reward:
-            ball_potential = self.ball_x+((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175
+            ball_potential = self.ball_x+((self.ball_x-80)**3-(self.ball_x-80)*(self.ball_y-65)**2)*0.000175 - 85.0
             #https://academo.org/demos/3d-surface-plotter/?expression=x%2B((x-80)%5E3-(x-80)*(y-65)%5E2)*0.000175&xRange=-0%2C165&yRange=0%2C130&resolution=58
             if (self.prev_ball_potential != None):
 
@@ -587,7 +587,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 reward = penalty + (0.3*robot_to_ball_reward + 0.7*ball_to_goal_reward)
                 #reward = penalty + ball_to_goal_reward
 
-                if (reward>-0.95 or reward < -1):
+                if (reward>-0.75 or reward < -1):
                     print("cmd:%d"%self.cmd + " r->b:%.2f"%robot_to_ball_reward + " b->g:%.2f"%ball_to_goal_reward + " pen:%.2f"%penalty + " rwd:%.2f"%reward)
 
                 #clip reward
