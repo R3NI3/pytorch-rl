@@ -32,11 +32,11 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans-Polar6LayersDD"    # "machine_id"
-        self.timestamp   = "180707"   # "yymmdd##"
+        self.machine     = "c011_01"    # "machine_id"
+        self.timestamp   = "180720_DQN"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
-        self.load_pretrained = True    # load pretrained model if true
+        self.load_pretrained = False    # load pretrained model if true
         self.config      = 9
 
         self.seed        = 123
