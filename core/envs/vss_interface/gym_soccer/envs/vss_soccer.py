@@ -45,11 +45,11 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.decAng = 0.6
 
         #Positive potential constants
-        self.u_B2G = 1
-        self.u_R2B = 0.5
+        self.u_B2G = 0.1
+        self.u_R2B = 0.1
         #Negative potential constants
-        self.u_B2OG = 1
-        self.u_Col = 0.1
+        self.u_B2OG = 0
+        self.u_Col = 0
         
     def setup_connections(self, ip='127.0.0.1', port=5555, parameters = '-a' , is_team_yellow = True):
         self.ip = ip
@@ -438,7 +438,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             #potential to own goal
             p_B2OG = -1*np.exp(-(((self.ball_x)**2+(self.ball_y-65)**2)/2*((0.025)**2))) #40cm radius
             #potential controled robot to ball
-            p_R2B = 1*np.exp(-(((self.x-self.ball_x)**2+(self.y-self.ball_y)**2)/2*((0.05)**2))) #20cm radius
+            p_R2B = 1*np.exp(-(((self.x-self.ball_x)**2+(self.y-self.ball_y)**2)/2*((0.0125)**2))) #80cm radius
             #potential collision
             team_col, adv_col, wall_col = self.check_collision(t_yellow, t_blue)
             p_Col = -max(wall_col,team_col,adv_col)
@@ -458,9 +458,14 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             potencial = u_B2OG*(p_B2OG - self.old_p_B2OG) + u_B2G*(p_B2G - self.old_p_B2G) + \
                         u_R2B*(p_R2B - self.old_p_R2B) + u_Col*(p_Col - self.old_p_Col)
 
+            self.old_p_B2G = p_B2G
+            self.old_p_B2OG = p_B2OG
+            self.old_p_R2B = p_R2B
+            self.old_p_Col = p_Col
         else:
             potencial = u_B2OG*(-self.old_p_B2OG) + u_B2G*(-self.old_p_B2G) + \
                         u_R2B*(-self.old_p_R2B) + u_Col*(-self.old_p_Col)
+
             self.old_p_B2G = None
             self.old_p_B2OG = None
             self.old_p_R2B = None

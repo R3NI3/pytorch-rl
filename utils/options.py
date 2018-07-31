@@ -32,8 +32,8 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "c011_01"    # "machine_id"
-        self.timestamp   = "180720_DQN"   # "yymmdd##"
+        self.machine     = "renie"    # "machine_id"
+        self.timestamp   = "180731_DQN"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
         self.load_pretrained = False    # load pretrained model if true
@@ -48,7 +48,7 @@ class Params(object):   # NOTE: shared across all modules
 
         if self.agent_type == "dqn":
             self.enable_double_dqn  = True
-            self.enable_dueling     = False
+            self.enable_dueling     = True
             self.dueling_type       = 'avg' # avg | max | naive
 
             if self.env_type == "gym":
@@ -192,14 +192,14 @@ class AgentParams(Params):  # hyperparameters for drl agents
         if self.agent_type == "dqn" and self.env_type == "gym" or \
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
-            self.early_stop          = None     # max #steps per episode
-            self.gamma               = 0.95
+            self.early_stop          = 500     # max #steps per episode
+            self.gamma               = 0.75
             self.clip_grad           = 0.01#np.inf
-            self.lr                  = 0.00001
+            self.lr                  = 0.001
             self.lr_decay            = False
             self.weight_decay        = 0.
-            self.eval_freq           = 250     # NOTE: here means every this many steps
-            self.eval_steps          = 250
+            self.eval_freq           = 5000     # NOTE: here means every this many steps
+            self.eval_steps          = 500
             self.prog_freq           = self.eval_freq
             self.test_nepisodes      = 10
 
@@ -207,13 +207,13 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.batch_size          = 32
             self.valid_size          = 250
             self.eps_start           = 0.5
-            self.eps_end             = 0.05
+            self.eps_end             = 0.1
             self.eps_eval            = 0.05
             self.eps_decay           = 1000000
             self.target_model_update = 1000#0.0001
             self.action_repetition   = 1
             self.memory_interval     = 1
-            self.train_interval      = 2
+            self.train_interval      = 10
 
             self.minSampleProb       = 1
             self.rewardRangeScale    = 0.5
