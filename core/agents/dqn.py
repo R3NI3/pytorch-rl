@@ -299,10 +299,8 @@ class DQNAgent(Agent):
             if self.early_stop and (episode_steps + 1) >= self.early_stop or (self.step + 1) % self.eval_freq == 0:
                 # to make sure the historic observations for the first hist_len-1 steps in (the next episode / eval) would be clean
                 should_start_new = True
-            if should_start_new:
-                self._backward(reward, True)
-            else:
-                self._backward(reward, self.experience.terminal1)
+            
+            self._backward(reward, self.experience.terminal1)
 
             episode_steps += 1
             episode_reward += reward
@@ -390,10 +388,8 @@ class DQNAgent(Agent):
                 # to make sure the historic observations for the first hist_len-1 steps in (the next episode / resume training) would be clean
                 eval_should_start_new = True
             # NOTE: here NOT doing backprop, only adding into recent memory
-            if eval_should_start_new:
-                self._backward(eval_reward, True)
-            else:
-                self._backward(eval_reward, self.experience.terminal1)
+            
+            self._backward(eval_reward, self.experience.terminal1)
 
             eval_episode_steps += 1
             eval_episode_reward += eval_reward
@@ -412,12 +408,22 @@ class DQNAgent(Agent):
                 if self.experience.terminal1:
                     eval_nepisodes_solved += 1
 
+                if not(self.early_stop and (eval_episode_steps) >= self.early_stop or (eval_step) == self.eval_steps):
                 # This episode is finished, report and reset
-                eval_episode_steps_log.append([eval_episode_steps])
-                eval_episode_reward_log.append([eval_episode_reward])
-                self._reset_states()
-                eval_episode_steps = None
-                eval_episode_reward = None
+                    eval_episode_steps_log.append([eval_episode_steps])
+                    eval_episode_reward_log.append([eval_episode_reward])
+                    print(eval_episode_reward,"--------------------------")
+                    self._reset_states()
+                    eval_episode_steps = None
+                    eval_episode_reward = None
+                
+                else: # Just reset
+                    if(eval_episode_steps_log == []):
+                        eval_episode_steps_log.append([self.early_stop])
+                        eval_episode_reward_log.append([0])
+                    self._reset_states()
+                    eval_episode_steps = None
+                    eval_episode_reward = None
 
         # Computing validation stats
         v_avg, tderr_avg_vb = self._compute_validation_stats()
