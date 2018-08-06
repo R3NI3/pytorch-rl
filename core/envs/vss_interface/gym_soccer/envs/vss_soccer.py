@@ -45,11 +45,11 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.decAng = 0.6
 
         #Positive potential constants
-        self.u_B2G = 0.1
-        self.u_R2B = 0.1
+        self.u_B2G = 1
+        self.u_R2B = 0.5
         #Negative potential constants
-        self.u_B2OG = 0
-        self.u_Col = 0
+        self.u_B2OG = 1
+        self.u_Col = 0.5
         
     def setup_connections(self, ip='127.0.0.1', port=5555, parameters = '-a' , is_team_yellow = True):
         self.ip = ip
@@ -445,15 +445,19 @@ class SoccerEnv(gym.Env, utils.EzPickle):
 
             if (self.old_p_B2G == None):
                 self.old_p_B2G = p_B2G
+                self.init_p_B2G = p_B2G
 
             if (self.old_p_B2OG == None):
                 self.old_p_B2OG = p_B2OG
+                self.init_p_B2OG = p_B2OG
 
             if (self.old_p_R2B == None):
                 self.old_p_R2B = p_R2B
+                self.init_p_R2B = p_R2B
 
             if (self.old_p_Col == None):
                 self.old_p_Col = p_Col
+                self.init_p_Col = p_Col
 
             potencial = u_B2OG*(p_B2OG - self.old_p_B2OG) + u_B2G*(p_B2G - self.old_p_B2G) + \
                         u_R2B*(p_R2B - self.old_p_R2B) + u_Col*(p_Col - self.old_p_Col)
@@ -463,8 +467,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             self.old_p_R2B = p_R2B
             self.old_p_Col = p_Col
         else:
-            potencial = u_B2OG*(-self.old_p_B2OG) + u_B2G*(-self.old_p_B2G) + \
-                        u_R2B*(-self.old_p_R2B) + u_Col*(-self.old_p_Col)
+            potencial = u_B2OG*(self.init_p_B2OG-self.old_p_B2OG) + u_B2G*(self.init_p_B2G-self.old_p_B2G) + \
+                        u_R2B*(self.init_p_R2B-self.old_p_R2B) + u_Col*(self.init_p_Col-self.old_p_Col)
 
             self.old_p_B2G = None
             self.old_p_B2OG = None
