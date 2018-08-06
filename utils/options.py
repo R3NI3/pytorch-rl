@@ -33,10 +33,10 @@ class Params(object):   # NOTE: shared across all modules
 
         # training signature
         self.machine     = "renie"    # "machine_id"
-        self.timestamp   = "180731_DQN"   # "yymmdd##"
+        self.timestamp   = "180801_DQN_near"   # "yymmdd##"
         # training configuration
-        self.mode        = 1            # 1(train) | 2(test model_file)
-        self.load_pretrained = False    # load pretrained model if true
+        self.mode        = 2            # 1(train) | 2(test model_file)
+        self.load_pretrained = True    # load pretrained model if true
         self.config      = 9
 
         self.seed        = 123
@@ -193,9 +193,9 @@ class AgentParams(Params):  # hyperparameters for drl agents
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
             self.early_stop          = 500     # max #steps per episode
-            self.gamma               = 0.75
+            self.gamma               = 0.8
             self.clip_grad           = 0.01#np.inf
-            self.lr                  = 0.001
+            self.lr                  = 0.00001
             self.lr_decay            = False
             self.weight_decay        = 0.
             self.eval_freq           = 5000     # NOTE: here means every this many steps
@@ -206,8 +206,8 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.learn_start         = 1000     # start update params after this many steps
             self.batch_size          = 32
             self.valid_size          = 250
-            self.eps_start           = 0.5
-            self.eps_end             = 0.1
+            self.eps_start           = 0.05
+            self.eps_end             = 0.05
             self.eps_eval            = 0.05
             self.eps_decay           = 1000000
             self.target_model_update = 1000#0.0001

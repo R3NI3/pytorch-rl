@@ -45,11 +45,11 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.decAng = 0.6
 
         #Positive potential constants
-        self.u_B2G = 1
-        self.u_R2B = 0.5
+        self.u_B2G = 0.1
+        self.u_R2B = 0.1
         #Negative potential constants
-        self.u_B2OG = 1
-        self.u_Col = 0.5
+        self.u_B2OG = 0.1
+        self.u_Col = 0.1
         
     def setup_connections(self, ip='127.0.0.1', port=5555, parameters = '-a' , is_team_yellow = True):
         self.ip = ip
@@ -430,37 +430,37 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         return vt/12
 
     def potentialFunc(self, t_yellow, t_blue, u_B2OG, u_B2G, u_R2B, u_Col, state_terminal):
+        #gaussian used
+        #https://academo.org/demos/3d-surface-plotter/?expression=1*exp(-(((x-160)%5E2%2B(y-65)%5E2)%2F2*((0.01)%5E2)))&xRange=-0%2C165&yRange=0%2C130&resolution=39
+        #potential to adversary goal
+        p_B2G = 1*np.exp(-(((self.ball_x-160)**2+(self.ball_y-65)**2)/2*((0.025)**2))) #40cm radius
+        #potential to own goal
+        p_B2OG = -1*np.exp(-(((self.ball_x)**2+(self.ball_y-65)**2)/2*((0.025)**2))) #40cm radius
+        #potential controled robot to ball
+        p_R2B = 1*np.exp(-(((self.x-self.ball_x)**2+(self.y-self.ball_y)**2)/2*((0.0125)**2))) #80cm radius
+        #potential collision
+        team_col, adv_col, wall_col = self.check_collision(t_yellow, t_blue)
+        p_Col = -max(wall_col,team_col,adv_col)
+
+        if (self.old_p_B2G == None):
+            self.old_p_B2G = p_B2G
+            self.init_p_B2G = p_B2G
+
+        if (self.old_p_B2OG == None):
+            self.old_p_B2OG = p_B2OG
+            self.init_p_B2OG = p_B2OG
+
+        if (self.old_p_R2B == None):
+            self.old_p_R2B = p_R2B
+            self.init_p_R2B = p_R2B
+
+        if (self.old_p_Col == None):
+            self.old_p_Col = p_Col
+            self.init_p_Col = p_Col
+
         if (state_terminal == False):
-            #gaussian used
-            #https://academo.org/demos/3d-surface-plotter/?expression=1*exp(-(((x-160)%5E2%2B(y-65)%5E2)%2F2*((0.01)%5E2)))&xRange=-0%2C165&yRange=0%2C130&resolution=39
-            #potential to adversary goal
-            p_B2G = 1*np.exp(-(((self.ball_x-160)**2+(self.ball_y-65)**2)/2*((0.025)**2))) #40cm radius
-            #potential to own goal
-            p_B2OG = -1*np.exp(-(((self.ball_x)**2+(self.ball_y-65)**2)/2*((0.025)**2))) #40cm radius
-            #potential controled robot to ball
-            p_R2B = 1*np.exp(-(((self.x-self.ball_x)**2+(self.y-self.ball_y)**2)/2*((0.0125)**2))) #80cm radius
-            #potential collision
-            team_col, adv_col, wall_col = self.check_collision(t_yellow, t_blue)
-            p_Col = -max(wall_col,team_col,adv_col)
-
-            if (self.old_p_B2G == None):
-                self.old_p_B2G = p_B2G
-                self.init_p_B2G = p_B2G
-
-            if (self.old_p_B2OG == None):
-                self.old_p_B2OG = p_B2OG
-                self.init_p_B2OG = p_B2OG
-
-            if (self.old_p_R2B == None):
-                self.old_p_R2B = p_R2B
-                self.init_p_R2B = p_R2B
-
-            if (self.old_p_Col == None):
-                self.old_p_Col = p_Col
-                self.init_p_Col = p_Col
-
             potencial = u_B2OG*(p_B2OG - self.old_p_B2OG) + u_B2G*(p_B2G - self.old_p_B2G) + \
-                        u_R2B*(p_R2B - self.old_p_R2B) + u_Col*(p_Col - self.old_p_Col)
+                        u_R2B*(p_R2B - self.old_p_R2B) + u_Col*(p_Col - self.old_p_Col) - 0.01
 
             self.old_p_B2G = p_B2G
             self.old_p_B2OG = p_B2OG
@@ -538,12 +538,12 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         
         if (advantage != self.prev_advantage):
             #terminal state
-            reward = (advantage - self.prev_advantage) + self.potentialFunc(state.robots_yellow, state.robots_blue, 
+            reward = (advantage - self.prev_advantage)*5 + self.potentialFunc(state.robots_yellow, state.robots_blue, 
                                                                             self.u_B2OG, self.u_B2G, self.u_R2B, 
                                                                             self.u_Col, True)
             done = True
         else:
-            reward = (advantage - self.prev_advantage) + self.potentialFunc(state.robots_yellow, state.robots_blue, 
+            reward = (advantage - self.prev_advantage)*5 + self.potentialFunc(state.robots_yellow, state.robots_blue, 
                                                                             self.u_B2OG, self.u_B2G, self.u_R2B, 
                                                                             self.u_Col, False)
 

@@ -14,7 +14,7 @@ class DQNAgent(Agent):
     def __init__(self, args, env_prototype, model_prototype, memory_prototype):
         super(DQNAgent, self).__init__(args, env_prototype, model_prototype, memory_prototype)
         self.logger.warning("<===================================> DQN")
-
+        self.dist = 10
         # env
         self.env = self.env_prototype(self.env_params)
         self.state_shape = self.env.state_shape
@@ -140,10 +140,6 @@ class DQNAgent(Agent):
         # TODO: can optionally use huber loss from here: https://medium.com/@karpathy/yes-you-should-understand-backprop-e2f06eab496b
         td_error_vb = self.value_criteria(current_q_values_vb, expected_q_values_vb)
 
-        if self.step > 200000:
-            self.gamma = 0.9
-        elif self.step > 50000:
-            self.gamma = 0.5
         # return v_avg, tderr_avg_vb
         if not self.training:   # then is being called from _compute_validation_stats, which is just doing inference
             td_error_vb = Variable(td_error_vb.data) # detach it from the graph
@@ -354,7 +350,6 @@ class DQNAgent(Agent):
     def _eval_model(self):
         self.training = False
         eval_step = 0
-
         eval_nepisodes = 0
         eval_nepisodes_solved = 0
         eval_episode_steps = None
