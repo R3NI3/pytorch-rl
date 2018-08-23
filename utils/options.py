@@ -33,7 +33,7 @@ class Params(object):   # NOTE: shared across all modules
 
         # training signature
         self.machine     = "renie"    # "machine_id"
-        self.timestamp   = "180731_DQN"   # "yymmdd##"
+        self.timestamp   = "teste"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
         self.load_pretrained = False    # load pretrained model if true
@@ -48,15 +48,15 @@ class Params(object):   # NOTE: shared across all modules
 
         if self.agent_type == "dqn":
             self.enable_double_dqn  = True
-            self.enable_dueling     = True
+            self.enable_dueling     = False
             self.dueling_type       = 'avg' # avg | max | naive
 
             if self.env_type == "gym":
                 self.hist_len       = 1
                 self.hidden_dim     = 16
             else:
-                self.hist_len       = 1
-                self.hidden_dim     = 256
+                self.hist_len       = 5
+                self.hidden_dim     = 128
 
             self.use_cuda           = torch.cuda.is_available()
             self.dtype              = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
@@ -192,23 +192,23 @@ class AgentParams(Params):  # hyperparameters for drl agents
         if self.agent_type == "dqn" and self.env_type == "gym" or \
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
-            self.early_stop          = 500     # max #steps per episode
-            self.gamma               = 0.75
+            self.early_stop          = None     # max #steps per episode
+            self.gamma               = 0.9
             self.clip_grad           = 0.01#np.inf
-            self.lr                  = 0.001
+            self.lr                  = 0.0001
             self.lr_decay            = False
             self.weight_decay        = 0.
-            self.eval_freq           = 5000     # NOTE: here means every this many steps
-            self.eval_steps          = 500
+            self.eval_freq           = 100000     # NOTE: here means every this many steps
+            self.eval_steps          = 30000
             self.prog_freq           = self.eval_freq
             self.test_nepisodes      = 10
 
-            self.learn_start         = 1000     # start update params after this many steps
+            self.learn_start         = 5000     # start update params after this many steps
             self.batch_size          = 32
             self.valid_size          = 250
-            self.eps_start           = 0.5
+            self.eps_start           = 0.8
             self.eps_end             = 0.1
-            self.eps_eval            = 0.05
+            self.eps_eval            = 0.01
             self.eps_decay           = 1000000
             self.target_model_update = 1000#0.0001
             self.action_repetition   = 1
