@@ -19,8 +19,8 @@ import signal
 
 path_viewer = 'vss_sim/VSS-Viewer'
 path_simulator = 'vss_sim/VSS-Simulator'
-command_rate = 330 #ms
-cmd_wait = 266 # 1/4 of 60 frames x (1s in ms)/fps  
+cmd_wait = 266#266 # 1/4 of 60 frames x (1s in ms)/fps  
+command_rate = cmd_wait+64#165#330 #ms
 
 class SoccerEnv(gym.Env, utils.EzPickle):
     def __init__(self):
@@ -552,7 +552,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
             self.avg_ball_potential = 0
 
         elif(reward != 0):
-            reward = 2*MAX_STEPS*reward
+            reward = 3*MAX_STEPS*reward
             done = True
             print("******************GOAL****************")
             print("Reward:"+str(reward))     
@@ -575,7 +575,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 penalty = -0.75 - 0.25*max(wall_col,same_team_col,adv_team_col)
 
                 #compute penalty action minimization
-                robot_to_ball_reward = self.clip((self.prev_robot_ball_dist-robot_ball_dist)/10.0,-0.5, 1.0)
+                robot_to_ball_reward = self.clip((self.prev_robot_ball_dist-robot_ball_dist)/10.0,-0.5, 0.5)
                 ball_to_goal_reward =  self.clip((ball_potential - self.prev_ball_potential)/10.0,-0.5, 1.0)
 
                 if (robot_ball_dist>15):#No donuts if the ball is far
@@ -584,10 +584,10 @@ class SoccerEnv(gym.Env, utils.EzPickle):
                 #if (robot_to_ball_reward<0):
                 #    robot_to_ball_reward = 0
 
-                reward = penalty + (0.3*robot_to_ball_reward + 0.7*ball_to_goal_reward)
+                reward = penalty + (robot_to_ball_reward + ball_to_goal_reward)
                 #reward = penalty + ball_to_goal_reward
 
-                if (reward>-0.75 or reward < -1):
+                if (reward>-0.5 or reward < -1.25):
                     print("cmd:%d"%self.cmd + " r->b:%.2f"%robot_to_ball_reward + " b->g:%.2f"%ball_to_goal_reward + " pen:%.2f"%penalty + " rwd:%.2f"%reward)
 
                 #clip reward

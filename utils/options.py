@@ -32,17 +32,17 @@ class Params(object):   # NOTE: shared across all modules
         self.verbose     = 0            # 0(warning) | 1(info) | 2(debug)
 
         # training signature
-        self.machine     = "Hans-Polar6LayersDD"    # "machine_id"
-        self.timestamp   = "180707"   # "yymmdd##"
+        self.machine     = "Hans-Montreal"    # "machine_id"
+        self.timestamp   = "g0.25"   # "yymmdd##"
         # training configuration
-        self.mode        = 1            # 1(train) | 2(test model_file)
-        self.load_pretrained = True    # load pretrained model if true
+        self.mode        = 1           # 1(train) | 2(test model_file)
+        self.load_pretrained = False    # load pretrained model if true
         self.config      = 9
 
         self.seed        = 123
         self.render      = True        # whether render the window from the original envs or not
         self.visualize   = True         # whether do online plotting and stuff or not
-        self.save_best   = True        # save model w/ highest reward if True, otherwise always save the latest model
+        self.save_best   = False        # save model w/ highest reward if True, otherwise always save the latest model
 
         self.agent_type, self.env_type, self.game, self.model_type, self.memory_type = CONFIGS[self.config]
 
@@ -193,9 +193,9 @@ class AgentParams(Params):  # hyperparameters for drl agents
            self.agent_type == "dqn" and self.env_type == "vss":
             self.steps               = 10000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
-            self.gamma               = 0.95
+            self.gamma               = 0.25
             self.clip_grad           = 0.01#np.inf
-            self.lr                  = 0.00001
+            self.lr                  = 0.001
             self.lr_decay            = False
             self.weight_decay        = 0.
             self.eval_freq           = 250     # NOTE: here means every this many steps
@@ -207,7 +207,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.batch_size          = 32
             self.valid_size          = 250
             self.eps_start           = 0.5
-            self.eps_end             = 0.05
+            self.eps_end             = 0.3
             self.eps_eval            = 0.05
             self.eps_decay           = 1000000
             self.target_model_update = 1000#0.0001
