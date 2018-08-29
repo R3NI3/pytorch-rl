@@ -280,7 +280,7 @@ class SoccerEnv_v1(gym.Env, utils.EzPickle):
 
         #***********************get state of environment******************************
 
-        env_state, balls, robot = get_observation_from_state(state)    
+        env_state, balls, robot = get_observation_from_state(state, mode="self_centered")    
         self.ball = balls[0]
 
         self.my_agent = robot

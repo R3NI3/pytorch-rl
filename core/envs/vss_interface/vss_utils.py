@@ -13,6 +13,12 @@ decAlpha = 0.3
 decLin = 0.9
 decAng = 0.6
 
+goal_y_global = 65
+goal_x_global = 185
+
+goal_y = 65
+goal_x = 185
+
 def clip(val, vmin, vmax):
     return min(max(val, vmin), vmax)
 
@@ -53,7 +59,7 @@ def getWheelSpeeds(robot, target_x, target_y, target_theta, KRHO=1, rho_inc = 0)
     lambda_ = math.atan2((target_y-robot["y"]),(target_x-robot["x"]))
     alpha = to180range(lambda_ - robot["theta"])
     beta = to180range(-target_theta - alpha)
-    
+
     reverse = False
     if (abs(alpha)>math.pi/2):
         robot["theta"] = to180range(robot["theta"]+math.pi)
@@ -63,31 +69,28 @@ def getWheelSpeeds(robot, target_x, target_y, target_theta, KRHO=1, rho_inc = 0)
 
     linearSpeed = KRHO*(rho+rho_inc)
     angularSpeed = KALPHA*alpha + KBETA*beta
-
+    
     if reverse:
         linearSpeed = -linearSpeed
         #self.angularSpeed = -self.angularSpeed
         
     #print (math.degrees(self.theta), math.degrees(target_theta), math.degrees(lambda_), math.degrees(alpha), math.degrees(beta))
 
-    leftSpeed  = (linearSpeed - angularSpeed*HALF_AXIS)/WHEEL_RADIUS
-    rightSpeed = (linearSpeed + angularSpeed*HALF_AXIS)/WHEEL_RADIUS
+    leftSpeed  = (linearSpeed + angularSpeed*HALF_AXIS)/WHEEL_RADIUS
+    rightSpeed = (linearSpeed - angularSpeed*HALF_AXIS)/WHEEL_RADIUS
     
-    #print(self.linearSpeed, self.angularSpeed)
-            
-    return rightSpeed, leftSpeed
+    return leftSpeed, rightSpeed
 
 def getTransformMatrix_g2l(theta, pos_x, pos_y):#global 2 local transform
     R_l2g = np.array([[math.cos(theta),math.sin(theta)],
                      [-math.sin(theta),math.cos(theta)]]) #2x2
     R_g2l = np.transpose(R_l2g)
 
-    D = np.transpose(-np.array([pos_x,pos_y])) #2x1
+    D = -np.array([pos_x,pos_y]) #2x1
+    D = np.matmul(R_g2l,D) #2x2 * 2x1 -> 2x1
 
-    D = np.matmul(R_g2l,D) #2x2 * 2X1 -> 2x1
-
-    H_g2l = np.append(R_g2l, D, axis = 1) #2x3
-    H_g2l = np.append(H_g2l, np.array([0,0,1]), axis = 0) #3x3
+    H_g2l = np.column_stack((R_g2l, D)) #2x3
+    H_g2l = np.row_stack((H_g2l, np.array([0,0,1]))) #3x3
 
     return H_g2l
 
@@ -186,10 +189,87 @@ def get_raw_obs(state):
     env_state = ball_state + t1_state + t2_state
     return np.array(env_state), balls, my_agent
 
-def get_rho_phi_act(global_commands, robot, ball, target, adv_goal):
-    goal_y = adv_goal["y"]
-    goal_x = adv_goal["x"]
+def get_sc_obs(state):
+    my_agent = {}
+    t1_state = ()    
+    for idx, t1_robot in enumerate(state.robots_yellow):
+        if (idx==0):     
+            my_agent["x"] = t1_robot.pose.x
+            my_agent["y"] = t1_robot.pose.y
+            my_agent["theta"] = t1_robot.pose.yaw
+            theta_g2l = t1_robot.pose.yaw
+            H_matrix = getTransformMatrix_g2l(t1_robot.pose.yaw, t1_robot.pose.x, t1_robot.pose.y) #3x3
+            vel_global = np.transpose(np.array([t1_robot.v_pose.x, t1_robot.v_pose.y, 1])) #3x1
 
+            vel_local = np.matmul(H_matrix, vel_global) # 3x1
+            t1_state += (0, 0, #x , y 
+                         0, 1,  #sin(theta=0), cos(theta=0)
+                         normVx(vel_local[0]), normVx(vel_local[1]), normVt(t1_robot.v_pose.yaw))
+        else:
+
+            vel_global = np.transpose(np.array([t1_robot.v_pose.x, t1_robot.v_pose.y, 1])) #3x1
+            pos_global = np.transpose(np.array([t1_robot.pose.x, t1_robot.pose.y, 1])) #3x1
+            
+            theta_local = t1_robot.pose.yaw - theta_g2l
+            pos_local = np.matmul(H_matrix, pos_global) # 3x1
+            vel_local = np.matmul(H_matrix, vel_global) # 3x1
+
+            t1_state += (normX(pos_local[0]), normX(pos_local[1]),
+                         math.sin(theta_local), math.cos(theta_local),
+                         normVx(vel_local[0]), normVx(vel_local[1]), normVt(t1_robot.v_pose.yaw))
+
+
+    #get balls values
+    balls = []
+    ball_state = ()
+    for idx, ball in enumerate(state.balls):
+        ball_idx = {}
+
+        pos_global = np.transpose(np.array([ball.pose.x, ball.pose.y, 1])) #3x1
+        vel_global = np.transpose(np.array([ball.v_pose.x, ball.v_pose.y, 1])) #3x1
+
+        pos_local = np.matmul(H_matrix, pos_global) # 3x1
+        vel_local = np.matmul(H_matrix, vel_global) # 3x1
+
+        ball_idx["x"] = ball.pose.x
+        ball_idx["y"] = ball.pose.y
+
+        ball_state += (normX(pos_local[0]),normX(pos_local[1]),
+                       normVx(vel_local[0]),normVx(vel_local[1]))
+
+        balls.append(ball_idx)
+
+    t2_state = ()
+    for idx, t2_robot in enumerate(state.robots_blue):        
+        vel_global = np.transpose(np.array([t2_robot.v_pose.x, t2_robot.v_pose.y, 1])) #3x1
+        pos_global = np.transpose(np.array([t2_robot.pose.x, t2_robot.pose.y, 1])) #3x1
+        
+        theta_local = t2_robot.pose.yaw - theta_g2l
+        pos_local = np.matmul(H_matrix, pos_global) # 3x1
+        vel_local = np.matmul(H_matrix, vel_global) # 3x1
+
+        t2_state += (normX(pos_local[0]), normX(pos_local[1]),
+                     math.sin(theta_local), math.cos(theta_local),
+                     normVx(vel_local[0]), normVx(vel_local[1]), normVt(t1_robot.v_pose.yaw))
+    
+    #adv goal position
+    pos_global = np.transpose(np.array([goal_x_global, goal_y_global, 1])) #3x1
+    pos_local = np.matmul(H_matrix, pos_global) # 3x1
+    #goal_x = pos_local[0]
+    #goal_y = pos_local[1]
+    adv_goal_state = (pos_local[0],pos_local[1])
+
+    #own goal postition
+    pos_global = np.transpose(np.array([5, goal_y_global, 1])) #3x1
+    pos_local = np.matmul(H_matrix, pos_global) # 3x1
+    #goal_x = pos_local[0]
+    #goal_y = pos_local[1]
+    own_goal_state = (pos_local[0],pos_local[1])
+
+    env_state = ball_state + t1_state + t2_state + adv_goal_state + own_goal_state
+    return np.array(env_state), balls, my_agent
+
+def get_rho_phi_act(global_commands, robot, ball, target, adv_goal):
     if target["theta"] == None:
         target["theta"] = robot["theta"]
 
@@ -207,7 +287,7 @@ def get_rho_phi_act(global_commands, robot, ball, target, adv_goal):
         target_rho   = -target_rho
         target["theta"] =  to180range(target["theta"]+math.pi)
 
-    if global_commands == 0: #default command: carry ball to goal
+    if global_commands >= 0: #default command: carry ball to goal
         goal_theta = math.atan2((ball["y"]-goal_y),(ball["x"]-goal_x))
         rho  = np.linalg.norm(np.array((ball["x"], ball["y"])) - np.array((robot["x"], robot["y"])))
         apr = max(BALL_APPROACH,-rho/2)
@@ -252,6 +332,9 @@ def get_rho_phi_act(global_commands, robot, ball, target, adv_goal):
 def get_observation_from_state(state, mode = "raw"):
     if (mode == "raw"):
         env_state, balls, my_agent = get_raw_obs(state)
+
+    elif (mode == "self_centered"):
+        env_state, balls, my_agent = get_sc_obs(state)
 
     else:
         env_state, balls, my_agent = None, None, None
