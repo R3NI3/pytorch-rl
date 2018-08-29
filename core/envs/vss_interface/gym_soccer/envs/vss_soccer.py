@@ -92,6 +92,8 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         self.target = {"theta":None,
                       "x": None,
                       "y": None}
+        self.adv_goal = {"x":185, #adversary goal
+                         "y":65}
 
         #potential vars
         self.old_p_B2G = None
@@ -147,7 +149,7 @@ class SoccerEnv(gym.Env, utils.EzPickle):
         robot.id = 0
         
         robot.left_vel, robot.right_vel  = get_action_from_command(global_commands, self.my_agent,
-                                                                   self.ball, self.target)
+                                                                   self.ball, self.target, self.adv_goal)
 
         for i in range(2):
             robot = c.robot_commands.add()

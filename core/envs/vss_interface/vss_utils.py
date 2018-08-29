@@ -13,9 +13,6 @@ decAlpha = 0.3
 decLin = 0.9
 decAng = 0.6
 
-goal_x = 185
-goal_y = 65
-
 def clip(val, vmin, vmax):
     return min(max(val, vmin), vmax)
 
@@ -189,7 +186,10 @@ def get_raw_obs(state):
     env_state = ball_state + t1_state + t2_state
     return np.array(env_state), balls, my_agent
 
-def get_rho_phi_act(global_commands, robot, ball, target):
+def get_rho_phi_act(global_commands, robot, ball, target, adv_goal):
+    goal_y = adv_goal["y"]
+    goal_x = adv_goal["x"]
+    
     if target["theta"] == None:
         target["theta"] = robot["theta"]
 
@@ -258,9 +258,9 @@ def get_observation_from_state(state, mode = "raw"):
 
     return env_state, balls, my_agent
 
-def get_action_from_command(commands, robot, ball, target, mode = "phi_rho"):
+def get_action_from_command(commands, robot, ball, target, adv_goal, mode = "phi_rho"):
     if(mode == "phi_rho"):
-        robot_leftVel, robot_rightVel = get_rho_phi_act(commands, robot, ball, target)
+        robot_leftVel, robot_rightVel = get_rho_phi_act(commands, robot, ball, target, adv_goal)
 
     else:
         robot_leftVel, robot_rightVel = None, None
