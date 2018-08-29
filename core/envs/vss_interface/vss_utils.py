@@ -189,7 +189,7 @@ def get_raw_obs(state):
 def get_rho_phi_act(global_commands, robot, ball, target, adv_goal):
     goal_y = adv_goal["y"]
     goal_x = adv_goal["x"]
-    
+
     if target["theta"] == None:
         target["theta"] = robot["theta"]
 
