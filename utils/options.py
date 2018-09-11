@@ -24,7 +24,7 @@ CONFIGS = [
 [ "a3c",      "gym",       "InvertedPendulum-v1",      "a3c-mlp-con",  "none"      ],  # 6
 [ "acer",     "gym",       "CartPole-v0",              "acer-mlp-dis", "episodic"  ],  # 7  # NOTE: acer under testing
 [ "acer",     "atari",     "Boxing-v0",                "acer-cnn-dis", "episodic"  ],  # 8  # NOTE: acer under testing
-[ "dqn",      "vss",       "vss_soccer-v0",            "vssdqn-mlp",  "sequential"      ]   # 9
+[ "dqn",      "vss",       "vss_soccer-v1",            "vssdqn-mlp",  "sequential"      ]   # 9
 ]
 
 class Params(object):   # NOTE: shared across all modules
@@ -33,7 +33,7 @@ class Params(object):   # NOTE: shared across all modules
 
         # training signature
         self.machine     = "renie"    # "machine_id"
-        self.timestamp   = "teste"   # "yymmdd##"
+        self.timestamp   = "teste_v1_shortMemmory"   # "yymmdd##"
         # training configuration
         self.mode        = 1            # 1(train) | 2(test model_file)
         self.load_pretrained = False    # load pretrained model if true
@@ -166,7 +166,7 @@ class MemoryParams(Params):     # settings for replay memory
         if self.agent_type == "dqn" and self.env_type == "gym":
             self.memory_size = 50000
         elif self.agent_type == "dqn" and self.env_type == "vss":
-            self.memory_size = 1000000
+            self.memory_size = 100000
         else:
             self.memory_size = 1000000
 
@@ -191,7 +191,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
         # hyperparameters
         if self.agent_type == "dqn" and self.env_type == "gym" or \
            self.agent_type == "dqn" and self.env_type == "vss":
-            self.steps               = 10000000   # max #iterations
+            self.steps               = 100000000   # max #iterations
             self.early_stop          = None     # max #steps per episode
             self.gamma               = 0.9
             self.clip_grad           = 0.01#np.inf
@@ -207,7 +207,7 @@ class AgentParams(Params):  # hyperparameters for drl agents
             self.batch_size          = 32
             self.valid_size          = 250
             self.eps_start           = 0.8
-            self.eps_end             = 0.1
+            self.eps_end             = 0.01
             self.eps_eval            = 0.01
             self.eps_decay           = 1000000
             self.target_model_update = 1000#0.0001

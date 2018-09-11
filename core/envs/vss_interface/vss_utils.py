@@ -14,10 +14,10 @@ decLin = 0.9
 decAng = 0.6
 
 goal_y_global = 65
-goal_x_global = 185
+goal_x_global = 160
 
 goal_y = 65
-goal_x = 185
+goal_x = 160
 
 def clip(val, vmin, vmax):
     return min(max(val, vmin), vmax)
@@ -257,14 +257,14 @@ def get_sc_obs(state):
     pos_local = np.matmul(H_matrix, pos_global) # 3x1
     #goal_x = pos_local[0]
     #goal_y = pos_local[1]
-    adv_goal_state = (pos_local[0],pos_local[1])
+    adv_goal_state = (normX(pos_local[0]),normX(pos_local[1]))
 
     #own goal postition
     pos_global = np.transpose(np.array([5, goal_y_global, 1])) #3x1
     pos_local = np.matmul(H_matrix, pos_global) # 3x1
     #goal_x = pos_local[0]
     #goal_y = pos_local[1]
-    own_goal_state = (pos_local[0],pos_local[1])
+    own_goal_state = (normX(pos_local[0]),normX(pos_local[1]))
 
     env_state = ball_state + t1_state + t2_state + adv_goal_state + own_goal_state
     return np.array(env_state), balls, my_agent
@@ -287,7 +287,7 @@ def get_rho_phi_act(global_commands, robot, ball, target, adv_goal):
         target_rho   = -target_rho
         target["theta"] =  to180range(target["theta"]+math.pi)
 
-    if global_commands >= 0: #default command: carry ball to goal
+    if global_commands == 0: #default command: carry ball to goal
         goal_theta = math.atan2((ball["y"]-goal_y),(ball["x"]-goal_x))
         rho  = np.linalg.norm(np.array((ball["x"], ball["y"])) - np.array((robot["x"], robot["y"])))
         apr = max(BALL_APPROACH,-rho/2)
